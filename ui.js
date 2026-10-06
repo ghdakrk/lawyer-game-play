@@ -898,7 +898,6 @@ function tryCloseSheet() {
   if (sheetMode === 'kim') { startKim(); return; }
   if (sheetMode === 'ending') { endingDone(); return; }
   if (!sheetMode && scene === 'stage' && W && !W.ended && player && player.dead) { closeSheet(); deathSheet(); return; }   // 쓰러진 채 메뉴(충전)를 닫으면 부활 창으로
-  if (sheetMode === 'trial' && scene === 'stage' && W && W.cleared) { closeSheet(); enterTown(); return; }   // 결과 창에서 넘어온 경우 마을로
   closeSheet();
 }
 function closeSheet() { $('#sheet').classList.remove('show', 'top'); sheetRender = null; selItem = null; sheetMode = ''; quiz = null; save(); refreshQuestUI(); }
@@ -1050,9 +1049,11 @@ function compTab() {
         <div class="row wrap" style="margin-top:4px"><button class="btn sm ${inP ? 'ghost' : ''}" data-party="${id}" ${!inP && S.party.length >= S.slots ? 'disabled' : ''}>${inP ? '빼기' : '데려가기'}</button>${lv < 10 ? `<button class="btn ghost sm" data-cup="${id}" ${S.gold >= cost ? '' : 'disabled'}>레벨 업 · ₩${fmt(cost)}</button>` : ''}</div></div></div>`;
     }).join('')}</div>`;
 }
-// 영구 구매만 판다 (스토어가 구매 기록을 보관 → 서버 없이 「구매 복원」). 인지·뽑기는 돈으로 팔지 않는다
+// 영구 구매 (스토어가 구매 기록을 보관 → 「구매 복원」). 인지는 아래 인지 충전에서 판다
+// 개업 패키지: 계정에 한 번만 파는 첫 결제 상품. 코스튬은 모든 슬롯, 인지·뽑기권·계약서는 산 슬롯에 한 번
+const STARTER = { inji: 600, tickets: 3, contracts: 3 };
 const STORE = [
-  { id: 'full', name: '정식판', price: 2900, d: '3~5장 · 히든 직업 · 3차 승진 · 직업별 엔딩 9종 · 상고심 · 재심(새 회차)까지 전부' },
+  { id: 'starter', name: '개업 패키지', price: 2900, cos: ['cape'], d: `한 번만 · 인지 ${STARTER.inji} + 코스튬 뽑기권 ${STARTER.tickets} + 장비 계약서 ${STARTER.contracts} + 영웅 망토` },
   { id: 'ai', name: 'AI 법률비서 (영구)', price: 2200, d: 'AUTO 공격력 80% → 100% · 스킬·궁극기 자동 사용' },
   { id: 'slots', name: '세이브 슬롯 +3칸', price: 1500, d: '타이틀 슬롯 3칸 → 6칸. 진로별로 동시에 키우기' },
   { id: 'cos_court', name: '코스튬 팩 · 법정 패션', price: 1900, cos: ['wig', 'policecap', 'scales'], d: '법정 가발 · 경찰 모자 · 정의의 저울(전설). 모든 슬롯에 지급' },
@@ -1066,7 +1067,7 @@ function purchase(id) {
   const p = STORE.find((x) => x.id === id); if (!p || owns(id)) return;
   grantOwned(id); SFX.play('level');
   toast(`<b>${esc(p.name)}</b> 구매 완료 (테스트 · 실제 결제 없음)`, 3500);
-  if (id === 'full' || p.all) showBanner('정식판', '3장부터 끝까지 열렸습니다');
+  if (id === 'starter' || p.all) claimStarter();
   refreshSheet(); save();
 }
 function grantOwned(id) {
@@ -1084,11 +1085,17 @@ function restorePurchases() {
   applyOwned(); const got = STORE.filter((p) => !p.all && owns(p.id)).map((p) => p.name);
   toast(got.length ? `구매 복원: ${got.map(esc).join(' · ')}` : '복원할 구매가 없습니다', 3500); refreshSheet(); save();
 }
-// 정식판 이전에 3장 이상을 진행한 테스트 저장은 정식판으로 인정
+// 예전 정식판(테스트 기간 구매·인정)은 개업 패키지로 바꿔 준다
 function grandfather() {
-  if (fullGame() || !(S.ng || Object.keys(S.cleared).some((k) => parseSid(k).c > TRIAL_CH))) return;
-  const a = accLoad(); a.owned.full = now(); a.grandfathered = true; accSave(a);
-  toast('테스트 기간에 진행한 저장 → 정식판으로 인정했어요', 4500);
+  const a = accLoad(); if (a.owned.full && !a.owned.starter) { a.owned.starter = a.owned.full; accSave(a); toast('정식판이 없어지고 모두 무료가 됐어요 · 정식판 → 「개업 패키지」로 바꿔 드렸어요', 5000); }
+  claimStarter();
+}
+// 개업 패키지의 인지·뽑기권·계약서는 계정에 한 번, 지금 슬롯에 지급
+function claimStarter() {
+  const a = accLoad(); if (!a.owned.starter || a.starterClaimed || !S.major) return;
+  a.starterClaimed = now(); accSave(a);
+  S.inji += STARTER.inji; S.cosTickets = (S.cosTickets || 0) + STARTER.tickets; S.contracts = (S.contracts || 0) + STARTER.contracts;
+  showBanner('개업 패키지', `인지 ${STARTER.inji} · 코스튬 뽑기권 ${STARTER.tickets} · 장비 계약서 ${STARTER.contracts} · 영웅 망토`); applyOwned(); save();
 }
 // 인지 충전 (소모성 유료 재화). 실제 앱에서는 스토어 결제가 확인된 뒤 지급하고, 영수증 검증·클라우드 저장을 붙인다
 const INJI_PACKS = [
@@ -1125,31 +1132,23 @@ function injiCard() {
 }
 const toCharge = () => setTimeout(() => { const el = $('#inji-shop'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 60);
 function storeCard() {
-  return `<div class="card ${fullGame() ? '' : 'hot'}"><div class="row between"><h3>정식판 · 영구 구매</h3><button class="btn ghost sm" data-act="restore">구매 복원</button></div>
+  return `<div class="card"><div class="row between"><h3>영구 구매 · 패키지</h3><button class="btn ghost sm" data-act="restore">구매 복원</button></div>
     <p class="note">한 번 사면 영구. 모든 슬롯에 적용되고, 앱을 지웠다 깔거나 폰을 바꿔도 「구매 복원」으로 돌아옵니다. 인지는 아래 「인지 충전」에서.</p>
-    ${STORE.filter(storeVisible).map((p) => `<div class="row between"><span><b>${esc(p.name)}</b>${p.id === 'full' && !fullGame() ? ' <span class="note" style="color:var(--stamp)">3장부터</span>' : ''}<br><span class="note">${esc(p.d)}</span></span>${owns(p.id) ? '<span class="note" style="color:var(--exp);flex:none">보유</span>' : `<button class="btn sm ${p.id === 'full' || p.all ? 'red' : ''}" data-own="${p.id}">${won(p.price)}</button>`}</div>`).join('')}
+    ${STORE.filter(storeVisible).map((p) => `<div class="row between"><span><b>${esc(p.name)}</b>${p.id === 'starter' && !owns('starter') ? ' <span class="note" style="color:var(--stamp)">첫 결제 추천</span>' : ''}<br><span class="note">${esc(p.d)}</span></span>${owns(p.id) ? '<span class="note" style="color:var(--exp);flex:none">보유</span>' : `<button class="btn sm ${p.id === 'full' || p.all ? 'red' : ''}" data-own="${p.id}">${won(p.price)}</button>`}</div>`).join('')}
     <div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div></div>`;
-}
-// 체험판 끝 · 3장 입구
-function trialSheet() {
-  openSheet('정식판', [], () => fullGame()
-    ? '<div class="card"><h3>정식판 보유 중</h3><p>3장부터 끝까지 열려 있어요.</p><div class="row wrap"><button class="btn" data-act="close">닫기</button></div></div>'
-    : `<div class="card hot"><h3>체험판은 2장까지</h3><p>여기까지 오셨다면 이야기는 이제부터예요. <b>정식판 한 번이면 끝까지</b>, 추가 결제 없이 전부 열립니다.</p>
-      <div class="tease">${ENDING_IDS.slice(0, 3).map((id) => `<img src="assets/${ENDINGS[id].img}.jpg" alt="">`).join('')}<span>엔딩 9종</span></div>
-      <ul class="plist"><li>${CHAPTERS.slice(TRIAL_CH).map((c) => esc(c.name)).join(' → ')}</li><li>히든 직업 3종 · 3차 승진 6종 · 각성 궁극기</li><li>직업별 엔딩 9종 · 엔딩 도감</li><li>항소심 · 상고심(대법원) · 재심(새 회차)</li></ul>
-      <div class="row wrap"><button class="btn red" data-own="full">정식판 ${won(STORE[0].price)}</button><button class="btn ghost sm" data-act="restore">구매 복원</button><button class="btn ghost sm" data-act="later">나중에</button></div>
-      <p class="note">테스트 모드 · 실제 결제 없이 바로 열립니다.</p></div>`, null, 'trial');
 }
 function shopTab() {
   const lv = Math.min(10, 1 + Math.floor(S.eqPulls / 30)); const c = Math.max(0, ...Object.keys(S.cleared).map((k) => parseSid(k).c)) || 1;
   const owned = Object.keys(COSMETICS).filter((id) => S.inv.some((x) => x.cos === id)).length;
-  return `${fullGame() ? '' : storeCard()}
+  const top = !owns('starter');   // 개업 패키지를 안 샀으면 맨 위에
+  return `${top ? storeCard() : ''}
   <div class="card"><h3>서초 백화점 · 장비 뽑기 <span class="note">뽑기 Lv.${lv}</span></h3>
     <p>확률 (Lv.${lv}): ${gachaRates(lv).map((r, i) => `<span class="gc${i}">${GRADES[i]} ${r.toFixed(1)}%</span>`).join(' · ')}.</p>
+    ${eqOdds(lv)}
     <div class="row wrap"><button class="btn sm" data-gacha="1" ${S.inji >= 60 ? '' : 'disabled'}>1회 · 인지 60</button><button class="btn red sm" data-gacha="11" ${S.inji >= 600 ? '' : 'disabled'}>11회 · 인지 600</button>${S.inji < 600 ? '<button class="btn ghost sm" data-act="tocharge">인지 충전</button>' : ''}${S.contracts ? `<button class="btn ghost sm" data-gacha="c">계약서로 1회 (${S.contracts})</button>` : ''}</div></div>
   <div class="card"><h3>코스튬 뽑기 <span class="note">수집 ${owned}/${Object.keys(COSMETICS).length}</span></h3>
     <div class="cosrow">${Object.entries(COSMETICS).map(([id, cc]) => `<span class="cosic ${S.inv.some((x) => x.cos === id) ? '' : 'no'}" title="${esc(cc.name)}" style="${iconStyle('cos', cc.i)}"></span>`).join('')}</div>
-    <p>인지로 뽑는다(인지는 게임 안에서만 번다). 모자·등 장식. 입으면 모습이 바뀌고, <b>모으기만 해도</b> 수집 효과(능력치)가 쌓입니다. 12종 완성 시 세트 효과. 확률: 고급 55% · 희귀 33% · 영웅 10% · 전설 2%. 중복이면 인지 30 환급.</p>
+    <p>인지로 뽑는다. 모자·등 장식. 입으면 모습이 바뀌고, <b>모으기만 해도</b> 수집 효과(능력치)가 쌓입니다. 12종 완성 시 세트 효과. 확률: 고급 55% · 희귀 33% · 영웅 10% · 전설 2%. 중복이면 인지 30 환급.</p>${cosOdds()}
     <div class="row wrap"><button class="btn sm" data-cosg="1" ${S.inji >= 120 || S.cosTickets ? '' : 'disabled'}>${S.cosTickets ? `뽑기권 1회 (${S.cosTickets})` : '1회 · 인지 120'}</button><button class="btn red sm" data-cosg="10" ${S.inji >= 1100 ? '' : 'disabled'}>10회 · 인지 1,100</button>${S.inji < 1100 ? '<button class="btn ghost sm" data-act="tocharge">인지 충전</button>' : ''}</div></div>
   ${injiCard()}
   ${scene === 'town' ? `<div class="card"><h3>김밥집</h3><div class="grid">${Object.entries(CONSUMABLES).map(([id, cc]) => `<div class="slot" data-buyc="${id}" title="${esc(cc.d)}"><div class="ic" style="${iconStyle('loot', cc.icon)}"></div><span class="n">₩${fmt(cc.price(c))}</span></div>`).join('')}</div><p>탭해서 구매 (수임료).</p></div>` : '<p class="note">김밥집은 마을에서 이용할 수 있습니다.</p>'}
@@ -1160,7 +1159,7 @@ function shopTab() {
     <div class="row between"><span><b>스킬 초기화</b><br><span class="note">모든 스킬을 Lv.1로 · 쓴 SP·수임료 전부 환급 (배운 스킬은 그대로)</span></span><button class="btn sm ${skArm ? 'red' : ''}" data-act="skreset" ${S.inji >= 200 ? '' : 'disabled'}>${skArm ? '정말 초기화?' : '인지 200'}</button></div>
     <div class="row between"><span><b>이직 신청서</b><br><span class="note">고정된 2차 직업을 다른 직업으로 · 이력서 칸 +1 · 스킬 초기화(SP·수임료 환급) · 승진 경력 유지</span></span><button class="btn sm" data-act="jobticket" ${S.jobs.some((j) => JOBS[j].tier >= 2) && S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
     ${owns('ai') ? '' : `<div class="row between"><span><b>AI 법률비서 (7일)</b><br><span class="note">AUTO 공격력 80% → 100%, 스킬·궁극기 자동 사용${aiOn() ? ` · <b style="color:var(--exp)">${Math.ceil((S.aiUntil - now()) / 864e5)}일 남음</b>` : ''}</span></span><button class="btn sm" data-act="buyai" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>`}</div>
-  ${fullGame() ? storeCard() : ''}`;
+  ${top ? '' : storeCard()}`;
 }
 function cosGacha(n) {
   if (n === 1 && S.cosTickets) S.cosTickets--;
@@ -1176,6 +1175,17 @@ function cosGacha(n) {
     <p>${out.map(([id, nw]) => `<b class="gc${COSMETICS[id].grade}">${esc(COSMETICS[id].name)}</b>${nw ? '' : '(인지 30)'}`).join(' · ')}</p>
     <div class="row wrap"><button class="btn sm" data-act="mall">상점으로</button><button class="btn ghost sm" data-act="tobag">가방에서 끼기</button></div>`);
   showGuide('g_cos'); save();
+}
+// 확률 공개 (확률형 아이템): 코스튬은 등급 확률 ÷ 그 등급 개수, 장비는 등급 확률 × 종류 균등. 전설은 30%가 지금 직업 전용 전설 무기
+const COS_GRADE_P = { 4: 2, 3: 10, 2: 33, 1: 55 };
+function cosOdds() {
+  const rows = Object.entries(COS_GRADE_P).map(([g, gp]) => { const ids = Object.keys(COSMETICS).filter((id) => COSMETICS[id].grade === +g); return `<tr><td class="gc${g}">${GRADES[g]} ${gp}%</td><td>${ids.map((id) => `${esc(COSMETICS[id].name)} ${(gp / ids.length).toFixed(2)}%`).join(' · ')}</td></tr>`; }).join('');
+  return `<details class="odds"><summary>아이템별 확률 보기</summary><table>${rows}</table><p class="note">이미 가진 코스튬이 나오면 인지 30을 돌려받아요. 뽑기권도 같은 확률.</p></details>`;
+}
+function eqOdds(lv) {
+  const r = gachaRates(lv), n = EQ_BASES.length, leg = LEGENDS[S.job];
+  const rows = r.map((gp, g) => `<tr><td class="gc${g}">${GRADES[g]} ${gp.toFixed(2)}%</td><td>${g === 4 && leg ? `「${esc(leg.name)}」(지금 직업 전용·피흡) ${(gp * 0.3).toFixed(3)}% · 그 밖의 ${n}종 각 ${(gp * 0.7 / n).toFixed(3)}%` : `${n}종 각 ${(gp / n).toFixed(3)}%`}</td></tr>`).join('');
+  return `<details class="odds"><summary>아이템별 확률 보기 (뽑기 Lv.${lv})</summary><table>${rows}</table><p class="note">종류: ${EQ_BASES.map((b) => esc(b.name)).join(' · ')}. 능력치는 등급·레벨에 따른 범위 안에서 무작위. 30회 뽑을 때마다 뽑기 Lv +1(최대 10)이고 확률이 좋아져요. 장비 계약서도 같은 확률.</p></details>`;
 }
 function gachaRates(lv) { const a = [62, 26, 9.5, 2.3, 0.2], b = [30, 34, 24, 9.5, 2.5]; const t = (lv - 1) / 9; const r = a.map((x, i) => x + (b[i] - x) * t); const s = r.reduce((x, y) => x + y, 0); return r.map((x) => x / s * 100); }
 function bookTab() {
@@ -1218,7 +1228,7 @@ function bugReport(desc) {
   const app = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
   return [`[법조인 키우기 버그 제보] v${GAME_VERSION}`, `시간: ${new Date().toLocaleString('ko-KR')}`, `기기: ${window.navigator.userAgent}`,
     `화면: ${window.innerWidth}×${window.innerHeight} · DPR ${window.devicePixelRatio} · ${app ? '앱(홈 화면)' : '브라우저'} · 그래픽 ${GFX}/${['높음', '중간', '낮음'][gfxLevel]}`,
-    `진행: 슬롯 ${SLOT} · ${jobName()} Lv.${S.lv} · 사건 ${Object.keys(S.cleared || {}).length}/25${S.ng ? ` · 재심 ${S.ng}회차` : ''} · ${fullGame() ? '정식판' : '체험판'} · 지금 ${scene}${W && W.id ? ` ${W.id}` : ''}${W && W.tier ? ` (${TIERS[W.tier].name})` : ''}`,
+    `진행: 슬롯 ${SLOT} · ${jobName()} Lv.${S.lv} · 사건 ${Object.keys(S.cleared || {}).length}/25${S.ng ? ` · 재심 ${S.ng}회차` : ''} · 지금 ${scene}${W && W.id ? ` ${W.id}` : ''}${W && W.tier ? ` (${TIERS[W.tier].name})` : ''}`,
     `내용: ${desc || '(적지 않음)'}`, `최근 오류: ${ERRLOG.length ? `\n${ERRLOG.join('\n')}` : '없음'}`].join('\n');
 }
 // 휴대폰은 공유 창(카톡·메일 고르기), 안 되면 복사
@@ -1353,7 +1363,7 @@ function openBoard() {
 }
 function boardRender(tab) {
   const ci = +tab; const ch = CHAPTERS[ci]; const c = ci + 1;
-  const chOpen = stageOpen(c, 1), paid = c > TRIAL_CH && !fullGame();
+  const chOpen = stageOpen(c, 1);
   const bossDone = !!S.cleared[sid(c, 5)];
   const drops = QUESTS.filter((q) => qState(q.id) === 'active' && q.drops && q.drops.some((d) => d.ch.includes(c))).map((q) => q.goals.filter((g) => g.k === 'item').map((g) => QITEMS[g.it].name)).flat();
   const daily = S.daily.list.filter((d) => d.prog >= d.n && !d.claimed);
@@ -1363,7 +1373,6 @@ function boardRender(tab) {
   ${daily.length ? `<div class="card"><h3>오늘의 의뢰 완료</h3>${daily.map((d) => `<div class="row between"><span>${esc(MOBS[d.m].name)} ${d.n}마리</span><button class="btn sm" data-daily="${d.id}">보상 ₩${fmt(d.gold)} · 인지 ${d.inji}</button></div>`).join('')}</div>` : ''}
   <div class="card"><div class="row between"><h3>${esc(ch.name)}</h3><span class="note">${esc(ch.place)} · ${TYPE_LABEL[ch.type]}</span></div>
     ${c === 5 ? kakhaCard() : ''}
-    ${paid ? `<div class="row between" style="gap:8px"><span class="note" style="color:var(--stamp)">${TRIAL_CH + 1}장부터는 정식판에서 열려요</span><button class="btn red sm" data-act="trial">정식판 보기</button></div>` : ''}
     ${!chOpen && c > 1 && !chapterReqOk(c) && S.cleared[sid(c - 1, 5)] ? `<p style="color:var(--hp)">${esc(ch.req.why)}</p>` : ''}
     ${drops.length ? `<p>이 장에서 모을 수 있는 퀘스트 아이템: <b style="color:var(--exp)">${drops.map(esc).join(', ')}</b></p>` : ''}
     <div class="stages">${ch.stages.map((name, si) => {
@@ -1371,7 +1380,7 @@ function boardRender(tab) {
       const plan = STAGE_PLAN[si]; const tag = plan.boss ? `원흉 · ${BOSSES[ch.boss].name}` : plan.mid ? `중간 보스 · ${ch.midName}` : `구역 ${plan.zones}`;
       const lvCls = S.lv >= REC[g] ? '' : S.lv >= REC[g] - 2 ? 'warn' : 'danger';
       return `<div class="stage ${op ? '' : 'locked'} ${plan.boss ? 'boss' : plan.mid ? 'mid' : ''}"><div class="sn">${c}-${s}</div><div style="min-width:0"><b>${esc(name)}</b> <span class="stars">${'★'.repeat(cl ? cl.stars : 0)}${'☆'.repeat(3 - (cl ? cl.stars : 0))}</span><br><span class="note">${tag} · <span class="${lvCls}">권장 Lv.${REC[g]}</span>${S.supreme[id] ? ' · 대법원 확정' : S.hard[id] ? ' · 항소심 승소 → 상고 가능' : ''}</span></div>
-        <div class="row" style="gap:4px;flex:none">${paid ? '<span class="note">정식판</span>' : op ? `<button class="btn sm" data-stage="${id}">입장</button>${bossDone ? `<button class="btn red sm" data-stage="${id}" data-hard="1">항소</button>` : ''}${S.hard[id] ? `<button class="btn sm supreme" data-stage="${id}" data-hard="2">상고</button>` : ''}` : '<span class="note">잠김</span>'}</div></div>`;
+        <div class="row" style="gap:4px;flex:none">${op ? `<button class="btn sm" data-stage="${id}">입장</button>${bossDone ? `<button class="btn red sm" data-stage="${id}" data-hard="1">항소</button>` : ''}${S.hard[id] ? `<button class="btn sm supreme" data-stage="${id}" data-hard="2">상고</button>` : ''}` : '<span class="note">잠김</span>'}</div></div>`;
     }).join('')}</div>
     <p class="note">★ 해결 · ★ 피격 6회 이하 · ★ 제한 시간 안에 해결. 새 별마다 인지 20. ${S.ng ? `<b style="color:#c48cff">재심 ${S.ng}회차</b> · 몬스터 체력 ×${(1 + 0.8 * S.ng).toFixed(1)} · 공격 ×${(1 + 0.4 * S.ng).toFixed(1)} · 보상 ×${(1 + 0.5 * S.ng).toFixed(1)}<br>` : ''}5단계를 해결하면 항소심(권장 +8레벨·보상 2배), 항소심에서 이긴 단계는 상고심(대법원 · 권장 +18레벨 · 보상 4.5배 · 최고 등급 장비)이 열립니다.</p></div>`;
 }
@@ -1394,9 +1403,8 @@ function stageResults(first, bonus, stars) {
       ${Object.entries(L.books).map(([b, n]) => `<tr><td>${BOOKS[b].name}</td><td>×${n}</td></tr>`).join('')}${Object.entries(L.qitems).map(([it, n]) => `<tr><td>${esc(QITEMS[it].name)}</td><td>×${n}</td></tr>`).join('')}</table>
       ${L.items.length ? `<div class="grid">${L.items.map((it) => `<div class="slot g${it.grade}" title="${esc(it.name)}"><div class="ic" style="${itemIcon(it)}"></div></div>`).join('')}</div>` : '<p>장비 드랍 없음</p>'}
     </div>
-    ${c === TRIAL_CH && s === 5 && !fullGame() ? `<div class="card hot"><h3>체험판 마지막 사건 해결!</h3><p>${TRIAL_CH + 1}장부터는 정식판이에요. 2차 직업으로 법조타운, 검찰청 밤샘 조사, 그리고 김성호 법률사무소 50층까지.</p><div class="row wrap"><button class="btn red sm" data-act="trial">정식판 보기</button></div></div>` : ''}
     ${ready.length ? `<div class="card"><h3>보고할 퀘스트</h3>${ready.map((q) => `<p>✔ <b>${esc(q.title)}</b> · 마을의 ${esc(NPCS[q.giver].name)}</p>`).join('')}</div>` : ''}
-    <div class="row wrap">${nextOpen && !W.hard ? (parseSid(nextId).c > TRIAL_CH && !fullGame() ? `<button class="btn red" data-act="trial">${parseSid(nextId).c}장부터는 정식판 ▶</button>` : `<button class="btn" data-stage="${nextId}">다음 단계 ▶ ${nextId}</button>`) : ''}<button class="btn ${nextOpen && !W.hard ? 'ghost' : ''}" data-act="town">마을로</button><button class="btn ghost" data-act="retry">다시 하기 (파밍)</button></div>`, null, 'results');
+    <div class="row wrap">${nextOpen && !W.hard ? `<button class="btn" data-stage="${nextId}">다음 단계 ▶ ${nextId}</button>` : ''}<button class="btn ${nextOpen && !W.hard ? 'ghost' : ''}" data-act="town">마을로</button><button class="btn ghost" data-act="retry">다시 하기 (파밍)</button></div>`, null, 'results');
 }
 function kimPrep() {
   const known = S.rumors.slice().sort((a, b) => a - b);
@@ -1473,7 +1481,6 @@ function onSheetClick(ev) {
   else if (a === 'savefile') exportSave();
   else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();
-  else if (a === 'trial') { closeSheet(); trialSheet(); }
   else if (a === 'buyai') { if (S.inji < 300) return; S.inji -= 300; S.aiUntil = Math.max(now(), S.aiUntil) + 7 * 864e5; toast('AI 법률비서 7일 · AUTO 공격력 100% + 스킬 사용'); SFX.play('coin'); refreshSheet(); }
   else if (a === 'useboost') { if (!S.boosters) { toast('부스터가 없습니다 · 상점에서 구매'); return; } S.boosters--; S.boostUntil = Math.max(now(), S.boostUntil) + 30 * 60000; toast('경험치 2배 30분!'); SFX.play('level'); refreshSheet(); }
   else if (a === 'buyboost') { if (S.inji < 150) return; S.inji -= 150; S.boosters++; toast('경험치 부스터 구매 · 가방에서 사용'); SFX.play('coin'); refreshSheet(); }
@@ -1543,7 +1550,7 @@ function showTitle() {
     ${inAppNote()}
     <div class="slots">${Array.from({ length: slotCount() }, (_, i) => slotCard(i + 1)).join('')}</div>
     <div class="row wrap" style="justify-content:center"><button class="btn ghost sm" id="t-ends">엔딩 도감 ${got}/${ENDING_IDS.length}</button></div>
-    <p class="note">슬롯마다 다른 직업으로 키워 보세요. 엔딩은 슬롯을 넘어 모입니다. · ${fullGame() ? '정식판' : `체험판 · 1~${TRIAL_CH}장 무료`} · 현직 변호사가 만든 법조인 성장 액션 RPG · v${GAME_VERSION} · 버그 제보: 메뉴 → 설정</p>`;
+    <p class="note">슬롯마다 다른 직업으로 키워 보세요. 엔딩은 슬롯을 넘어 모입니다. · 전부 무료 · 현직 변호사가 만든 법조인 성장 액션 RPG · v${GAME_VERSION} · 버그 제보: 메뉴 → 설정</p>`;
   BGM.play('title');
   t.onclick = (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
@@ -1681,7 +1688,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
+  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

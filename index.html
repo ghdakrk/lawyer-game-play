@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.6.9-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.0-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -260,6 +260,11 @@ button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 .chip.on { background: color-mix(in srgb, var(--c) 35%, var(--panel)); }
 .evo { display: grid; gap: 1px; margin-top: 3px; font-size: 11px; color: var(--mute); }
 .evo .on { color: var(--hl); }
+.odds { margin: 4px 0 6px; font-size: 12px; }
+.odds summary { cursor: pointer; color: var(--mute); }
+.odds table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.odds td { padding: 3px 4px; border-top: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+.odds td:first-child { white-space: nowrap; width: 1%; }
 .pcard { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--panel); border-radius: 8px; padding: 7px 9px; border-left: 3px solid var(--c, var(--line)); }
 .pcard.on { box-shadow: inset 0 0 0 1px var(--c); }
 .pcard.locked { opacity: .5; border-left-color: var(--line); }

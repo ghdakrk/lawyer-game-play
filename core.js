@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.6.9-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.0-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -176,9 +176,7 @@ function accLoad() {
 }
 function accSave(a) { accObj = a; try { localStorage.setItem(ACC_KEY, JSON.stringify(a)); accRaw = null; } catch (e) { /* 저장이 막혀도 이번 실행 동안은 유지 */ } }
 const owns = (id) => !!accLoad().owned[id];
-// 체험판: 1~2장(2차 전직까지) 무료. 3장부터 정식판
-const TRIAL_CH = 2;
-const fullGame = () => owns('full');
+// v7.0: 체험판 잠금 없음 — 1~5장 전부 무료, 돈은 인앱 상품(개업 패키지·인지 충전·영구 구매)으로
 try { window.claude?.hot?.snapshot?.(() => ({ state: JSON.stringify(S), slot: SLOT })); } catch (e) { /* 무시 */ }
 
 const major = () => MAJORS.find((m) => m.id === S.major) || MAJORS[0];
@@ -447,7 +445,6 @@ function chapterReqOk(c) {
   return true;
 }
 function enterStage(c, s, hard = false) {
-  if (c > TRIAL_CH && !fullGame()) { trialSheet(); return; }   // 체험판은 2장까지
   const tier = hard === true ? 1 : +hard || 0; hard = tier > 0;
   const ch = CHAPTERS[c - 1]; timers.length = 0; timeScale = 1; hitStop = 0; resetKeys();
   const lay = stageLayout(c, s, hard);
