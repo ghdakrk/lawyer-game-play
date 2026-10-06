@@ -894,6 +894,7 @@ function tryCloseSheet() {
   if (sheetMode === 'results' || sheetMode === 'dead') { closeSheet(); enterTown(); return; }
   if (sheetMode === 'kim') { startKim(); return; }
   if (sheetMode === 'ending') { endingDone(); return; }
+  if (!sheetMode && scene === 'stage' && W && !W.ended && player && player.dead) { closeSheet(); deathSheet(); return; }   // 쓰러진 채 메뉴(충전)를 닫으면 부활 창으로
   if (sheetMode === 'trial' && scene === 'stage' && W && W.cleared) { closeSheet(); enterTown(); return; }   // 결과 창에서 넘어온 경우 마을로
   closeSheet();
 }
@@ -1447,6 +1448,7 @@ function onSheetClick(ev) {
   else if (a === 'jobticket') { closeSheet(); jobSheet(); return; }
   else if (a === 'jobticket_old') { if (S.inji < 500) return; const locked = TIER2.filter((j) => !S.jobs.includes(j)); if (!locked.length) { toast('이미 모든 2차 직업을 해금했습니다'); return; } S.inji -= 500; openSheet('경력 변경권', [], () => `<div class="choices">${locked.map((id) => `<button class="choice" data-unlockjob="${id}"><img src="${jobPortrait(id)}" alt=""><span><span class="t">${JOBS[id].name}</span><br><span class="d">${esc(JOBS[id].desc)}</span></span></button>`).join('')}</div>`, null, 'ticket'); }
   else if (a === 'revive') revive();
+  else if (a === 'revcharge') { openMenu('shop'); toCharge(); }
   else if (a === 'exampass') { const q = quiz.q; S.q[q.id].exam = true; closeSheet(); turnIn(q); }
   else if (a === 'examfail') expel(false);
   else if (a === 'dropout') { dropArm = true; refreshSheet(); }

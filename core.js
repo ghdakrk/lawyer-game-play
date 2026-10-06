@@ -731,12 +731,20 @@ function hurtPlayer(dmg, srcX) {
 function playerDied() {
   player.dead = true;
   if (W && W.surv) { W.ended = true; showBanner('탈락', `${W.wave}웨이브`); BGM.jingle('lose'); later(1.2, () => survivalResults()); return; } showBanner('번아웃', '멘탈이 바닥났습니다'); BGM.jingle('lose');
-  later(1.2, () => { openSheet('번아웃', [], () => `
-    <div class="card"><h3>사건이 속행되었습니다</h3><p>권장 레벨보다 낮다면 앞 단계를 다시 돌며 레벨과 장비를 챙기세요. 스킬·스탯·동료·이력서도 확인!</p>
-    <div class="row wrap">${(W.revives || 0) < REVIVE_COST.length ? `<button class="btn" data-act="revive" ${S.inji >= REVIVE_COST[W.revives || 0] ? '' : 'disabled'}>그 자리에서 부활 · 인지 ${REVIVE_COST[W.revives || 0]} <small>(이번 사건 ${REVIVE_COST.length - (W.revives || 0)}회 남음)</small></button>` : '<button class="btn" disabled>부활은 사건당 2번까지</button>'}<button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>`, null, 'dead'); showGuide('g_death'); });
+  later(1.2, () => { deathSheet(); showGuide('g_death'); });
 }
-// 부활은 사건당 2번까지, 두 번째는 더 비싸다 (무한 부활로 긴장감이 사라지지 않게)
-const REVIVE_COST = [50, 150];
+// 부활은 사건당 4번까지, 갈수록 비싸다 (무한 부활은 막고, 막히면 충전으로 이어진다)
+const REVIVE_COST = [50, 100, 200, 300];
+function deathSheet() { openSheet('번아웃', [], () => `
+    <div class="card"><h3>사건이 속행되었습니다</h3><p>권장 레벨보다 낮다면 앞 단계를 다시 돌며 레벨과 장비를 챙기세요. 스킬·스탯·동료·이력서도 확인!</p>
+    <div class="row wrap">${reviveBtns()}<button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>`, null, 'dead'); }
+function reviveBtns() {
+  const n = W.revives || 0, c = REVIVE_COST[n];
+  if (n >= REVIVE_COST.length) return `<button class="btn" disabled>부활은 사건당 ${REVIVE_COST.length}번까지</button>`;
+  const left = `<small>(이번 사건 ${REVIVE_COST.length - n}회 남음)</small>`;
+  if (S.inji >= c) return `<button class="btn" data-act="revive">그 자리에서 부활 · 인지 ${c} ${left}</button>`;
+  return `<button class="btn supreme" data-act="revcharge">인지 충전하고 부활 · ${c - S.inji} 부족 ${left}</button>`;
+}
 function revive() {
   const n = W.revives || 0; if (n >= REVIVE_COST.length || S.inji < REVIVE_COST[n]) return; S.inji -= REVIVE_COST[n]; W.revives = n + 1; closeSheet();
   const st = stats(); player.dead = false; player.hp = st.hp; player.mp = st.mp; player.inv = 2.5; buffs.invuln = 2;
