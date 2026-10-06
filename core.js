@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.6.8-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.6.9-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -185,7 +185,10 @@ const major = () => MAJORS.find((m) => m.id === S.major) || MAJORS[0];
 const job = () => JOBS[S.job];
 const jobName = (id = S.job) => (S.rank[id] && JOBS[id].rank ? JOBS[id].rank.name : JOBS[id].name);
 const ultId = () => { const j = job(); return S.rank[S.job] && j.rank ? j.rank.ult : j.ult; };
-const resumeSlots = () => Math.min(5, Math.max(0, S.jobs.length - 1) + (S.career || []).length);   // 재심 전 회차의 직업도 경력으로 친다
+// 이력서 칸: 직업 하나마다 +1, 재심 전 회차의 직업도 경력으로 친다. 재심 특전으로 회차마다 +1 (최대치도 +1, 10칸까지)
+const resumeCap = () => Math.min(10, 5 + (S.ng || 0));
+const resumeSlots = () => Math.min(resumeCap(), Math.max(0, S.jobs.length - 1) + (S.career || []).length + (S.ng || 0));
+const canRetrial = () => !!(S.cleared && S.cleared['5-5']);   // 재심은 이번 회차에 김성호(5-5)를 넘은 뒤에만
 const skillSlots = () => (S.jobs.some((j) => JOBS[j].tier >= 2) ? 4 : 3);
 const sid = (c, s) => `${c}-${s}`;
 const parseSid = (id) => { const [c, s] = id.split('-').map(Number); return { c, s, g: (c - 1) * 5 + (s - 1) }; };

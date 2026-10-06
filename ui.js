@@ -974,7 +974,7 @@ function resumeTab() {
   const card = (id, on, btn) => { const p = PASSIVES[id]; return `<div class="pcard ${on ? 'on' : ''}" style="--c:${JOBS[p.job].color}"><div><b>${esc(p.name)}</b> <span class="note">${esc(JOBS[p.job].name)}</span><br><span class="note">${esc(p.d)}</span></div>${btn || ''}</div>`; };
   const locked = Object.entries(PASSIVES).filter(([id, p]) => !S.passives.includes(id) && S.jobs.includes(p.job)).map(([id, p]) => `<div class="pcard locked"><div><b>${esc(p.name)}</b> <span class="note">${esc(JOBS[p.job].name)}</span><br><span class="note">${esc(p.d)} · 조건: ${p.unlock === 'rank' ? '승진' : `「${esc(SKILLS[p.unlock.skill].name)}」 Lv.${p.unlock.lv}`}</span></div></div>`).join('');
   return `<div class="card"><div class="row between"><h3>이력서</h3><b style="color:var(--hl)">칸 ${S.resume.length} / ${n}</b></div>
-    <p>직업을 하나 얻을 때마다 이력서 칸이 1칸 늘어요(최대 5). 예전 직업의 패시브를 꽂아 들고 다니세요. <b>이직할수록 강해집니다.</b></p>
+    <p>직업을 하나 얻을 때마다 이력서 칸이 1칸 늘어요(최대 ${resumeCap()}${S.ng ? ` · 재심 특전 +${S.ng}` : ' · 재심할 때마다 +1'}). 예전 직업의 패시브를 꽂아 들고 다니세요. <b>이직할수록 강해집니다.</b></p>
     ${n ? '' : '<p class="note">1차 전직(로스쿨생) 후 첫 칸이 열립니다.</p>'}
     ${S.resume.map((id) => card(id, true, `<button class="btn ghost sm" data-unres="${id}">빼기</button>`)).join('')}</div>
   <div class="card"><h3>현재 직업 패시브 <span class="note">항상 켜짐</span></h3>${mine.length ? mine.map((id) => card(id, true)).join('') : '<p>아직 없습니다.</p>'}</div>
@@ -1338,7 +1338,8 @@ function jobSheet() {
       <div class="choices">${pool.map((id) => `<button class="choice" data-transfer="${id}" ${S.inji >= 800 ? '' : 'disabled'}><img src="${jobPortrait(id)}" alt=""><span><span class="t">${esc(jobName(id))}</span>${S.jobs.includes(id) ? ' <span class="note">(경력 있음)</span>' : ''}<br><span class="d">${esc(JOBS[id].desc)}</span></span></button>`).join('')}</div></div>` : ''}
     ${canDrop ? `<div class="card"><h3>로스쿨 자퇴</h3><p class="note">되돌릴 수 없습니다. 재입학 불가. 대신 리걸테크 CEO · 정치 신인 · 법률 유튜버의 길이 열립니다.</p>${dropArm ? '<button class="btn red sm" data-act="dropout2">정말 자퇴 (되돌릴 수 없음)</button>' : '<button class="btn red sm" data-act="dropout">자퇴서 제출</button>'}</div>` : ''}
     ${S.dropout ? '' : `<div class="card"><h3>히든 직업</h3>${HIDDEN_JOBS.filter((h) => !S.jobs.includes(h)).map((h) => `<div class="choice" style="opacity:.6"><img src="${jobPortrait(h)}" alt="" style="filter:brightness(0) opacity(.6)"><span><span class="t">???</span><br><span class="d">${esc(HIDDEN_HINTS[h])}</span></span></div>`).join('') || '<p>모두 해금!</p>'}</div>`}
-    ${Object.keys(S.endSeen || {}).length ? `<div class="card hot"><h3>재심 청구 <span class="note">${(S.ng || 0) + 1}회차로</span></h3><p class="note">이 슬롯에서 대학생부터 다시 시작합니다. <b>레벨·장비·스탯·법률 상식·동료·코스튬·인지·수임료는 그대로</b>, 진로와 사건 진행만 처음부터. 스킬은 초기화되고 쓴 SP·수임료는 전부 돌려받아요. 다른 진로를 골라 다른 엔딩을 볼 수 있어요. 회차마다 몬스터 체력 +80% · 공격 +40% · 보상 +50%, 지난 직업은 이력서 경력으로 남습니다.</p>${ngArm ? '<button class="btn red sm" data-act="retrial2">정말 재심 청구 (진로·사건 초기화)</button>' : '<button class="btn sm" data-act="retrial">재심 청구</button>'}</div>` : ''}`;
+    ${canRetrial() ? `<div class="card hot"><h3>재심 청구 <span class="note">${(S.ng || 0) + 1}회차로</span></h3><p class="note">이 슬롯에서 대학생부터 다시 시작합니다. 진로와 사건 진행만 처음부터, 다른 진로를 골라 다른 엔딩을 볼 수 있어요.</p>
+      <p><b>재심 특전</b></p><p class="note">· <b style="color:var(--hl)">이력서 칸 +1</b> (회차마다, 최대 ${resumeCap()} → ${Math.min(10, resumeCap() + 1)}칸)<br>· 지난 2차 이상 직업은 이력서 경력으로 남아 칸이 하나 더 늘고, 그 직업 패시브도 꽂을 수 있어요<br>· 레벨·장비·스탯·법률 상식·동료·코스튬·인지·수임료·칭호·소문 그대로<br>· 스킬은 초기화, 쓴 SP·수임료 전부 환급 (새 진로에 다시 찍기)<br>· 보상 +50% (회차마다) · 대신 몬스터 Lv.+6 · 체력 +80% · 공격 +40%</p>${ngArm ? '<button class="btn red sm" data-act="retrial2">정말 재심 청구 (진로·사건 초기화)</button>' : '<button class="btn sm" data-act="retrial">재심 청구</button>'}</div>` : `<div class="card locked"><h3>재심 청구 <span class="note">잠김</span></h3><p class="note">${S.ng ? `${S.ng}회차 진행 중 · ` : ''}이번 회차에 김성호(5장 5단계)를 넘으면 열려요. 특전: 이력서 칸 +1 · 보상 +50% · 다른 진로로 다른 엔딩.</p></div>`}`;
   }, null, 'jobs');
 }
 
@@ -1456,8 +1457,8 @@ function onSheetClick(ev) {
   else if (a === 'exampass') { const q = quiz.q; S.q[q.id].exam = true; closeSheet(); turnIn(q); }
   else if (a === 'examfail') expel(false);
   else if (a === 'dropout') { dropArm = true; refreshSheet(); }
-  else if (a === 'retrial') { ngArm = true; refreshSheet(); }
-  else if (a === 'retrial2') { ngArm = false; retrial(); const rf = refundSkills((sid) => JOBS[SKILLS[sid].job].tier < 2); closeSheet(); ensureLoadout(true); checkPassives(); statCache = null; enterStage(1, 1); later(0.2, () => showBanner(`재심 ${S.ng}회차`, `레벨·장비는 그대로 · 스킬 초기화 SP ${rf.sp} 환급`)); }
+  else if (a === 'retrial') { if (!canRetrial()) return; ngArm = true; refreshSheet(); }
+  else if (a === 'retrial2') { if (!canRetrial()) return; ngArm = false; retrial(); const rf = refundSkills((sid) => JOBS[SKILLS[sid].job].tier < 2); closeSheet(); ensureLoadout(true); checkPassives(); statCache = null; enterStage(1, 1); later(0.2, () => showBanner(`재심 ${S.ng}회차`, `특전: 이력서 칸 +1 (지금 ${resumeSlots()}칸) · 스킬 초기화 SP ${rf.sp} 환급`)); }
   else if (a === 'dropout2') expel(true);
   else if (a === 'surv') { closeSheet(); enterSurvival(); }
   else if (a === 'restore') restorePurchases();
@@ -1583,7 +1584,7 @@ function endingGallery() {
   $('#sheet').classList.toggle('top', scene === 'title');
   const hint = { assoc: '어쏘변호사로', prosecutor: '검사로', judge: '판사로', defender: '국선전담변호사(히든)로', special: '특별검사(히든)로', justice: '헌법재판관(히든)으로', ceo: '리걸테크 CEO로', politician: '정치 신인으로', youtuber: '법률 유튜버로' };
   openSheet(`엔딩 도감 ${got}/${ENDING_IDS.length}`, [], () => `<p class="note">김성호를 넘은 직업마다 엔딩이 갈립니다. 모을수록 「지옥에서 온 변호사」의 정체가 드러나요.</p>
-    <div class="card"><b>엔딩 9개 모으는 법</b><p class="note">① 기본 직업(어쏘·검사·판사)으로 먼저 김성호를 넘고, 히든 직업으로 전직해 다시 넘으면 한 회차에 엔딩 2개.<br>② 해치의 「진로 상담」 → <b>재심 청구</b>: 같은 슬롯에서 레벨·장비를 그대로 들고 대학생부터 다른 진로로. 중퇴 루트(CEO·정치인·유튜버)도 재심으로.<br>③ 지름길: 이직 신청서(인지 800), 추가 세이브 슬롯(상점).</p></div>
+    <div class="card"><b>엔딩 9개 모으는 법</b><p class="note">① 기본 직업(어쏘·검사·판사)으로 먼저 김성호를 넘고, 히든 직업으로 전직해 다시 넘으면 한 회차에 엔딩 2개.<br>② 김성호를 넘은 뒤 해치의 「진로 상담」 → <b>재심 청구</b>: 같은 슬롯에서 레벨·장비를 그대로 들고 대학생부터 다른 진로로. 회차마다 이력서 칸 +1. 중퇴 루트(CEO·정치인·유튜버)도 재심으로.<br>③ 지름길: 이직 신청서(인지 800), 추가 세이브 슬롯(상점).</p></div>
     <div class="egrid">${ENDING_IDS.map((k) => { const e = ENDINGS[k]; return acc.endings[k] ? `<div class="ecard"><img src="assets/${e.img}.jpg" alt=""><b>${e.n}. ${esc(e.title)}</b><span class="note">${esc(e.sum)}</span></div>` : `<div class="ecard locked"><div class="ph">?</div><b>${e.n}. ???</b><span class="note">${hint[k]} 김성호를 넘기</span></div>`; }).join('')}</div>`, null, 'gallery');
 }
 function chooseMajor() {
