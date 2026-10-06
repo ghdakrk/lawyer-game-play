@@ -1,0 +1,37 @@
+{
+ "name": "법조인 키우기",
+ "short_name": "법조인 키우기",
+ "lang": "ko",
+ "start_url": "./",
+ "scope": "./",
+ "id": "./",
+ "display": "fullscreen",
+ "display_override": [
+  "fullscreen",
+  "standalone"
+ ],
+ "orientation": "any",
+ "background_color": "#05060c",
+ "theme_color": "#05060c",
+ "description": "현직 변호사가 만든 법조인 성장 액션 RPG (테스트 0.6.5-test)",
+ "icons": [
+  {
+   "src": "icons/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icons/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
