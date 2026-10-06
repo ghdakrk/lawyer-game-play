@@ -249,10 +249,10 @@ function stats() {
 const buffs = { americano: 0, energy: 0, cram: 0, guard: 0, reflect: 0, invuln: 0 };
 const buff = (k) => buffs[k] > 0;
 const skillLv = (id) => S.skl[id] || 0;
-// 자동 사냥: 해결한 사건만 · 공격력 60% (AI 법률비서 90% + 스킬 사용)
+// 자동 사냥: 해결한 사건만 · 공격력 80% (AI 법률비서 100% + 스킬 사용) · 피하기·줍기는 둘 다
 const aiOn = () => owns('ai') || S.aiUntil > now();
 const humanSim = () => !!window.__humanSim;
-const autoMul = () => (S.auto && !humanSim() ? (aiOn() ? 0.9 : 0.6) : 1);
+const autoMul = () => (S.auto && !humanSim() ? (aiOn() ? 1 : 0.8) : 1);
 const autoSkills = () => humanSim() || aiOn();
 // CEO는 스킬에 수임료를 쓴다
 const goldCost = (sk) => Math.round(sk.mp * (0.5 + S.lv * 0.12));
@@ -448,6 +448,10 @@ function enterStage(c, s, hard = false) {
     mobs: [], eprj: [], pprj: [], areas: [], pickups: [], fx: [], texts: [], allies: [], lock: null, boss: null, mid: null, t: 0, kills: 0, hits: 0,
     loot: { gold: 0, exp: 0, items: [], books: {}, qitems: {} }, go: false, ended: false, rumorSet: [], par: lay.plan.zones * 40 + (lay.plan.mid ? 40 : 0) + (lay.plan.boss ? 80 : 0) };
   S.last = W.id;
+  if (S.auto && S.cleared[W.id] && (S.cons.gimbap || 0) < 3) {   // 자동 사냥으로 들어가면 김밥 3개까지 수임료로 채운다
+    const pr = CONSUMABLES.gimbap.price(c); let n = 0; while ((S.cons.gimbap || 0) < 3 && S.gold >= pr) { S.gold -= pr; S.cons.gimbap = (S.cons.gimbap || 0) + 1; n++; }
+    if (n) later(0.5, () => toast(`자동 사냥 · 김밥 ${n}개 자동 구매 (₩${fmt(pr * n)})`));
+  }
   if (S.auto && !S.cleared[W.id] && !humanSim()) { S.auto = false; later(0.3, () => toast('처음 해결하는 사건은 직접! AUTO는 해결한 사건에서만 켜집니다')); }
   player = makePlayer(80);
   buildAllies();
@@ -806,7 +810,9 @@ function updatePickups(dt) {
     k.t += dt; const oldY = k.y; k.vy += 900 * dt; k.x += k.vx * dt; k.y += k.vy * dt; k.vx *= 0.96;
     const floor = GROUND - 6; if (k.y > floor) { k.y = floor; k.vy *= -0.35; k.vx *= 0.7; }
     else if (k.vy > 0) { const pl = platformsUnder(k.x, oldY + 6, k.y + 6); if (pl) { k.y = pl.y - 6; k.vy *= -0.35; k.vx *= 0.7; } }
-    const dx = p.x - k.x, dy = (p.y - 26) - k.y, d = Math.hypot(dx, dy);
+    let c = p, d = Math.hypot(p.x - k.x, (p.y - 26) - k.y);   // 가장 가까운 사람이 줍는다 (동료 포함)
+    for (const a of W.allies || []) { const da = Math.hypot(a.x - k.x, (a.y - 26) - k.y); if (da < d) { d = da; c = a; } }
+    const dx = c.x - k.x, dy = (c.y - 26) - k.y;
     const mag = k.k === 'coin' ? 90 : 70;
     if (k.t > 0.4 && d < mag) { k.x += dx * Math.min(1, dt * 9); k.y += dy * Math.min(1, dt * 9); }
     if (k.t > 0.4 && d < 18) { k.done = true; collect(k); }
@@ -1240,14 +1246,40 @@ function navTo(tx, ty, tplat) {
   else if (e.k === 'jump') { if (go(e.x)) { pressed.jump = true; p.navDir = e.dir; if (e.dir) keys[e.dir > 0 ? 'right' : 'left'] = true; } }
   else if (navLanding(p.x, p.y) === e.to || go(e.x)) pressed.down = true;   // 발판은 어디서든 ↓로 내려간다
 }
+// 자동 사냥 회피: 탄환·돌진·내려찍기·근접 예비 동작을 보고 피한다 (뒤로 물러났으면 true)
+function autoDodge(p, targets) {
+  if (p.climb) return false;
+  for (const e of W.eprj) {
+    const dx = p.x - e.x, vx = e.vx || 0; if (Math.abs(e.y - (p.y - 24)) > 46) continue;
+    if ((vx && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) / Math.abs(vx) < 0.38) || Math.abs(dx) < 26) { if (p.onGround) pressed.jump = true; break; }
+  }
+  for (const m of targets) {
+    const dx = m.x - p.x, adx = Math.abs(dx), facing = Math.sign(m.face || 1) === Math.sign(-dx || 1);
+    if (Math.abs(m.y - p.y) > 50) continue;
+    if (m.state === 'dash' && adx < 120 && facing) { if (p.onGround) pressed.jump = true; continue; }   // 돌진은 뛰어넘는다
+    if (m.boss && (m.state === 'crouch' || m.state === 'jump') && adx < 150) { keys.left = keys.right = false; keys[dx > 0 ? 'left' : 'right'] = true; return true; }   // 내려찍기 착지점에서 벗어난다
+    if (m.boss && m.state === 'slam' && adx < 220 && p.onGround) { pressed.jump = true; continue; }
+    if (m.state === 'wind' && !m.boss && facing && adx < m.w * 0.5 + 14 + 26) { keys.left = keys.right = false; keys[dx > 0 ? 'left' : 'right'] = true; return true; }   // 근접 공격 예비 동작이면 한 걸음 물러났다가 다시 친다
+  }
+  return false;
+}
 function autoPilot() {
   const p = player; if (p.dead) return;
   keys.left = keys.right = keys.up = keys.down = false;
   const targets = liveMobs().filter((m) => !m.fake);
   const st = stats();
-  if (p.hp < st.hp * 0.35 && S.cons.gimbap > 0) pressed.potion = true;
+  if (p.hp < st.hp * (targets.some((m) => m.boss) ? 0.55 : 0.45) && S.cons.gimbap > 0) pressed.potion = true;
   if (p.mp < st.mp * 0.15 && S.cons.coffee > 0 && targets.some((m) => m.boss || m.mid)) useCons('coffee');
   if (!targets.length) {
+    // 떨어진 수임료·장비부터 줍는다 (금고를 깨고 바로 떠나지 않게)
+    const loot = W.pickups.filter((k) => !k.done && Math.abs(k.x - p.x) < 340 && Math.abs(k.y - p.y) < 220).sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x))[0];
+    if (loot && (p.lootT = (p.lootT || 0) + 1 / 60) < 7) {
+      if (p.climb) { keys.down = true; return; }
+      if (Math.abs(loot.y + 6 - p.y) > 40) navTo(loot.x, loot.y + 6, W.platforms.find((q) => Math.abs(q.y - loot.y - 6) < 6 && loot.x >= q.x - 4 && loot.x <= q.x + q.w + 4) || null);
+      else if (Math.abs(loot.x - p.x) > 8) keys[loot.x > p.x ? 'right' : 'left'] = true;
+      return;
+    }
+    if (!loot) p.lootT = 0;
     let prop = p.ap && !p.ap.dead && !p.ap.skip ? p.ap : W.props.find((x) => !x.dead && !x.skip && Math.abs(x.x - p.x) < 220);
     if (prop !== p.ap) { p.ap = prop; p.apT = 0; }
     if (prop && (p.apT += 1 / 60) > 12) { prop.skip = true; p.ap = prop = null; }
@@ -1277,7 +1309,7 @@ function autoPilot() {
   else if (Math.abs(dx) > want) keys[dx > 0 ? 'right' : 'left'] = true;
   else if (Math.abs(dx) < keepAway && (!W.lock || (dx > 0 ? p.x - W.lock[0] > 60 : W.lock[1] - p.x > 60))) keys[dx > 0 ? 'left' : 'right'] = true;
   else { p.face = dx > 0 ? 1 : -1; if (p.atkT <= 0) pressed.attack = true; }
-  if ((W.eprj.some((e) => Math.abs(e.x - p.x) < 50 && Math.abs(e.y - p.y) < 40)) && p.onGround && Math.random() < 0.08) pressed.jump = true;
+  if (autoDodge(p, targets)) return;
   if (W.fx.some((f) => f.k === 'countdown') && p.onGround && p.y >= GROUND - 1) { const pl = W.platforms.slice().sort((a, c) => Math.abs(a.x + a.w / 2 - p.x) - Math.abs(c.x + c.w / 2 - p.x))[0]; if (pl) { keys.left = keys.right = false; const cx = pl.x + pl.w / 2; if (Math.abs(cx - p.x) > 20) keys[cx > p.x ? 'right' : 'left'] = true; else pressed.jump = true; } }
   const near = targets.filter((m) => Math.abs(m.x - p.x) < 170 && Math.abs(m.y - p.y) < 80).length;
   const lo = S.loadout;

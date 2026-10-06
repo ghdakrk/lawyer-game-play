@@ -28,14 +28,14 @@ const HEAD = {"atlas_heroes/student":[[122,9,84],[124,5,84],[127,5,85],[138,27,9
 // ======================================================================
 const COS_ATLAS = { cw: 154, ch: 139, sizes: [[139, 100], [113, 99], [135, 84], [118, 119], [138, 97], [116, 76], [121, 112], [129, 91], [137, 112], [135, 99], [150, 98], [135, 135]] };
 const COSMETICS = {
-  gradcap: { name: '학사모', slot: 'head', i: 0, grade: 1, sc: 1.15, dy: 0.56, dx: 0.02, st: { exp: 0.05 } },
-  crown: { name: '황금 왕관', slot: 'head', i: 1, grade: 4, sc: 0.8, dy: 0.37, dx: 0.04, st: { atkPct: 0.08, gold: 0.05 } },
-  headband: { name: '필승 머리띠', slot: 'head', i: 2, grade: 2, sc: 1.1, dy: 0.69, dx: -0.04, st: { spd: 0.05 } },
-  catphone: { name: '고양이 헤드폰', slot: 'head', i: 3, grade: 2, sc: 1.15, dy: 0.76, dx: 0, st: { mprPct: 0.15 } },
+  gradcap: { name: '학사모', slot: 'head', i: 0, grade: 1, sc: 1.15, dy: 0.68, dx: 0.02, st: { exp: 0.05 } },
+  crown: { name: '황금 왕관', slot: 'head', i: 1, grade: 4, sc: 0.8, dy: 0.46, dx: 0.04, st: { atkPct: 0.08, gold: 0.05 } },
+  headband: { name: '필승 머리띠', slot: 'head', i: 2, grade: 2, sc: 1.1, dy: 0.74, dx: -0.04, st: { spd: 0.05 } },
+  catphone: { name: '고양이 헤드폰', slot: 'head', i: 3, grade: 2, sc: 1.15, dy: 0.84, dx: 0, st: { mprPct: 0.15 } },
   halo: { name: '천사 링', slot: 'head', i: 4, grade: 3, sc: 0.9, dy: -0.12, dx: 0, float: true, st: { hpPct: 0.06 } },
-  horns: { name: '악마 뿔', slot: 'head', i: 5, grade: 3, sc: 0.95, dy: 0.41, dx: 0.04, st: { crit: 0.04 } },
-  wig: { name: '법정 가발', slot: 'head', i: 6, grade: 3, sc: 1.2, dy: 0.68, dx: -0.02, st: { skill: 0.06 } },
-  policecap: { name: '경찰 모자', slot: 'head', i: 7, grade: 2, sc: 1.15, dy: 0.56, dx: 0.04, st: { dr: 0.03 } },
+  horns: { name: '악마 뿔', slot: 'head', i: 5, grade: 3, sc: 0.95, dy: 0.5, dx: 0.04, st: { crit: 0.04 } },
+  wig: { name: '법정 가발', slot: 'head', i: 6, grade: 3, sc: 1.32, dy: 0.95, dx: -0.02, st: { skill: 0.06 } },
+  policecap: { name: '경찰 모자', slot: 'head', i: 7, grade: 2, sc: 1.15, dy: 0.68, dx: 0.04, st: { dr: 0.03 } },
   cape: { name: '영웅 망토', slot: 'back', i: 8, grade: 2, sc: 0.95, ox: -0.38, oy: 1.25, st: { hpPct: 0.05 } },
   angel: { name: '천사 날개', slot: 'back', i: 9, grade: 3, sc: 1.25, ox: -0.3, oy: 1.05, flap: true, st: { spd: 0.06 } },
   batwing: { name: '박쥐 날개', slot: 'back', i: 10, grade: 3, sc: 1.3, ox: -0.3, oy: 1.0, flap: true, st: { atkPct: 0.05 } },
@@ -853,7 +853,7 @@ const JOB_TRIVIA = { lawschool: 't32', assoc: 't17', prosecutor: 't30', judge: '
 // 성장 안내 추가
 Object.assign(GUIDES, {
   g_lock: { title: '진로는 한 번뿐', body: '2차 직업은 한 번 고르면 바꿀 수 없어요. 대학생·로스쿨생으로 돌아갈 수도 없습니다.\n다른 길이 궁금하면 상점의 「이직 신청서」(유료)로만 옮길 수 있어요. 옮길 때마다 이력서 칸이 늘어요.' },
-  g_auto: { title: '자동 사냥은 해결한 사건만', body: '처음 해결하는 사건은 직접 싸워야 해요. 한 번 해결한 사건만 AUTO로 반복할 수 있습니다.\nAUTO는 공격력 60%, 스킬을 쓰지 않아요. 상점의 「AI 법률비서」를 쓰면 공격력 90%에 스킬도 씁니다.' },
+  g_auto: { title: '자동 사냥은 해결한 사건만', body: '처음 해결하는 사건은 직접 싸워야 해요. 한 번 해결한 사건만 AUTO로 반복할 수 있습니다.\nAUTO는 공격력 80%, 스킬을 쓰지 않아요(피하기와 줍기는 해요). 상점의 「AI 법률비서」를 쓰면 공격력 100%에 스킬도 씁니다.' },
   g_dj: { title: '근거리 2단 점프', body: '근거리 직업은 공중에서 점프(X·↑)를 한 번 더 누르면 누른 쪽으로 「도약」해요.\n멀리 붙고, 탄을 피하고, 발판 사이를 건너요.\n높이는 조금만 오르니 2·3층은 밧줄로!' },
   g_snipe: { title: '위층 저격수', body: '책을 쏘는 몬스터(리치·복사기·히드라)는 위층에서 내려오지 않아요.\n점프로 발판을 밟고 올라가 처리하세요. 원거리는 아래에서 비스듬히 쏠 수도 있어요.\n밧줄은 맨 위 보물 금고로만 이어져요.' },
   g_evidence: { title: '증거 → 기소 · 구속', body: '검사는 기본 공격이 맞을 때마다 「증거」가 쌓여요(머리 위 빨간 도장).\n5개가 모이면 다음 공격이 「기소!」 — 주변을 크게 내려찍고 기절시킵니다.\n체력이 18% 이하인 일반 몬스터는 기본 공격 한 방에 「구속」! 멘탈과 커피가 찹니다.' },

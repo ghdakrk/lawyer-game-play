@@ -123,11 +123,11 @@ function giveRewards(r) {
   return out.join(' · ');
 }
 function addJob(id) { if (!S.jobs.includes(id)) S.jobs.push(id); }
-// 직업 전용 퀘스트는 지금 직업 것만 남긴다. 승진은 경력으로 친다: 한 번 승진했으면 이직한 직업도 승진 상태로
+// 직업 전용 퀘스트는 지금 직업 것만 남긴다. 승진은 경력으로 친다: 한 번 승진했거나 히든(3차) 직업이었으면 이직한 직업도 승진 상태로
 function fixJobQuests() {
   for (const q of QUESTS) if (qState(q.id) === 'active' && q.req && (q.req.jobs || q.req.route) && !reqOk(q.req)) delete S.q[q.id];
   const j = JOBS[S.job];
-  if (j.rank && !S.rank[S.job] && Object.values(S.rank).some(Boolean)) { S.rank[S.job] = 1; S.q[j.rank.q] = { st: 'done', prog: {} }; checkPassives(); statCache = null; return true; }
+  if (j.rank && !S.rank[S.job] && (Object.values(S.rank).some(Boolean) || S.jobs.some((x) => JOBS[x].hidden))) { S.rank[S.job] = 1; S.q[j.rank.q] = { st: 'done', prog: {} }; checkPassives(); statCache = null; return true; }
   return false;
 }
 const upCostAt = (id, lv) => Math.round(120 * Math.pow(lv, 1.7) * (1 + JOBS[SKILLS[id].job].tier));
@@ -143,7 +143,8 @@ function transferJob(id) {
   S.sp += sp; S.gold += gold;
   addJob(id); changeJob(id);
   const ranked = fixJobQuests();
-  if (ranked) showBanner(`이직 · ${jobName(id)}`, '승진 경력을 인정받았습니다');
+  if (ranked) showBanner(`이직 · ${jobName(id)}`, '3차 경력을 인정받아 승진 상태로 시작합니다');
+  else if (JOBS[id].rank && !S.rank[id]) { const rq = QMAP[JOBS[id].rank.q]; if (rq && questAvail(rq)) { acceptQuest(rq, true); later(1.2, () => toast(`승진 심사 「${esc(rq.title)}」를 받았어요 · ${esc(NPCS[rq.giver].name)}에게`, 4500)); } }
   refreshQuestUI(); updateBadges();
   return { sp, gold, ranked };
 }
@@ -737,7 +738,7 @@ function renderHud() {
   $('#h-exp').style.width = `${clamp(S.exp / expReq(S.lv) * 100, 0, 100)}%`;
   $('#h-gold').textContent = fmt(S.gold); $('#h-inji').textContent = fmt(S.inji);
   $('#b-home').hidden = scene !== 'stage' || !!(W && W.ended);
-  $('#b-auto').classList.toggle('on', S.auto); const al = S.auto ? (aiOn() ? 'AUTO 90%' : 'AUTO 60%') : 'AUTO'; if ($('#b-auto').textContent !== al) $('#b-auto').textContent = al; $('#b-sound').classList.toggle('on', S.sound);
+  $('#b-auto').classList.toggle('on', S.auto); const al = S.auto ? (aiOn() ? 'AUTO 100%' : 'AUTO 80%') : 'AUTO'; if ($('#b-auto').textContent !== al) $('#b-auto').textContent = al; $('#b-sound').classList.toggle('on', S.sound);
   const n = skillSlots();
   for (let i = 0; i < 4; i++) {
     const slot = 's' + (i + 1), btn = $(`#b-${slot}`); if (!btn) continue;
@@ -1018,7 +1019,7 @@ function compTab() {
 // 영구 구매만 판다 (스토어가 구매 기록을 보관 → 서버 없이 「구매 복원」). 인지·뽑기는 돈으로 팔지 않는다
 const STORE = [
   { id: 'full', name: '정식판', price: 2900, d: '3~5장 · 히든 직업 · 3차 승진 · 직업별 엔딩 9종 · 상고심 · 재심(새 회차)까지 전부' },
-  { id: 'ai', name: 'AI 법률비서 (영구)', price: 2200, d: 'AUTO 공격력 60% → 90% · 스킬·궁극기 자동 사용' },
+  { id: 'ai', name: 'AI 법률비서 (영구)', price: 2200, d: 'AUTO 공격력 80% → 100% · 스킬·궁극기 자동 사용' },
   { id: 'slots', name: '세이브 슬롯 +3칸', price: 1500, d: '타이틀 슬롯 3칸 → 6칸. 진로별로 동시에 키우기' },
   { id: 'cos_court', name: '코스튬 팩 · 법정 패션', price: 1900, cos: ['wig', 'policecap', 'scales'], d: '법정 가발 · 경찰 모자 · 정의의 저울(전설). 모든 슬롯에 지급' },
   { id: 'cos_angel', name: '코스튬 팩 · 천사와 악마', price: 1900, cos: ['halo', 'angel', 'horns', 'batwing'], d: '천사 링 · 천사 날개 · 악마 뿔 · 박쥐 날개. 모든 슬롯에 지급' },
@@ -1123,7 +1124,7 @@ function shopTab() {
     <div class="row between"><span><b>비급 · 중급</b><br><span class="note">스킬 배우기 재료</span></span><button class="btn sm" data-bbook="b2" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>
     <div class="row between"><span><b>비급 · 고급</b><br><span class="note">마지막 스킬 재료</span></span><button class="btn sm" data-bbook="b3" ${S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
     <div class="row between"><span><b>이직 신청서</b><br><span class="note">고정된 2차 직업을 다른 직업으로 · 이력서 칸 +1 · 스킬 초기화(SP·수임료 환급) · 승진 경력 유지</span></span><button class="btn sm" data-act="jobticket" ${S.jobs.some((j) => JOBS[j].tier >= 2) && S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
-    ${owns('ai') ? '' : `<div class="row between"><span><b>AI 법률비서 (7일)</b><br><span class="note">AUTO 공격력 60% → 90%, 스킬·궁극기 자동 사용${aiOn() ? ` · <b style="color:var(--exp)">${Math.ceil((S.aiUntil - now()) / 864e5)}일 남음</b>` : ''}</span></span><button class="btn sm" data-act="buyai" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>`}</div>
+    ${owns('ai') ? '' : `<div class="row between"><span><b>AI 법률비서 (7일)</b><br><span class="note">AUTO 공격력 80% → 100%, 스킬·궁극기 자동 사용${aiOn() ? ` · <b style="color:var(--exp)">${Math.ceil((S.aiUntil - now()) / 864e5)}일 남음</b>` : ''}</span></span><button class="btn sm" data-act="buyai" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>`}</div>
   ${fullGame() ? storeCard() : ''}`;
 }
 function cosGacha(n) {
@@ -1260,7 +1261,7 @@ function jobSheet() {
     const pool = (S.dropout ? ROUTE_JOBS : TIER2).filter((id) => id !== S.job);
     const path = S.jobs.map((id) => `<span class="${id === S.job ? 'gc4' : ''}">${esc(jobName(id))}</span>`).join(' → ');
     return `<div class="card"><h3>지금까지의 길</h3><p>${path}</p><p class="note">직업은 앞으로만 나아갑니다. 한 번 고른 2차 직업은 바꿀 수 없고, 예전 직업으로 돌아갈 수도 없어요(유료 이직 제외). 예전 직업의 패시브는 이력서에 꽂아 쓸 수 있습니다.</p></div>
-    ${t2.length ? `<div class="card"><h3>이직 신청서 <span class="note">인지 800</span></h3><p class="note">다른 ${S.dropout ? '중퇴 루트' : '2차'} 직업으로 옮깁니다. 직업이 하나 늘 때마다 이력서 칸 +1.<br><b>패시브만 가져갑니다.</b> 떠나는 직업의 스킬은 반납하고 모든 스킬이 Lv.1로 초기화되며, 쓴 SP·수임료·비급은 전부 돌려받아요. 승진(3차)했다면 새 직업도 승진 상태로 시작합니다.</p>
+    ${t2.length ? `<div class="card"><h3>이직 신청서 <span class="note">인지 800</span></h3><p class="note">다른 ${S.dropout ? '중퇴 루트' : '2차'} 직업으로 옮깁니다. 직업이 하나 늘 때마다 이력서 칸 +1.<br><b>패시브만 가져갑니다.</b> 떠나는 직업의 스킬은 반납하고 모든 스킬이 Lv.1로 초기화되며, 쓴 SP·수임료·비급은 전부 돌려받아요. 승진(3차)했거나 히든 직업이었다면 새 직업도 승진 상태(3차)로 시작합니다.</p>
       <div class="choices">${pool.map((id) => `<button class="choice" data-transfer="${id}" ${S.inji >= 800 ? '' : 'disabled'}><img src="${jobPortrait(id)}" alt=""><span><span class="t">${esc(jobName(id))}</span>${S.jobs.includes(id) ? ' <span class="note">(경력 있음)</span>' : ''}<br><span class="d">${esc(JOBS[id].desc)}</span></span></button>`).join('')}</div></div>` : ''}
     ${canDrop ? `<div class="card"><h3>로스쿨 자퇴</h3><p class="note">되돌릴 수 없습니다. 재입학 불가. 대신 리걸테크 CEO · 정치 신인 · 법률 유튜버의 길이 열립니다.</p>${dropArm ? '<button class="btn red sm" data-act="dropout2">정말 자퇴 (되돌릴 수 없음)</button>' : '<button class="btn red sm" data-act="dropout">자퇴서 제출</button>'}</div>` : ''}
     ${S.dropout ? '' : `<div class="card"><h3>히든 직업</h3>${HIDDEN_JOBS.filter((h) => !S.jobs.includes(h)).map((h) => `<div class="choice" style="opacity:.6"><img src="${jobPortrait(h)}" alt="" style="filter:brightness(0) opacity(.6)"><span><span class="t">???</span><br><span class="d">${esc(HIDDEN_HINTS[h])}</span></span></div>`).join('') || '<p>모두 해금!</p>'}</div>`}
@@ -1389,7 +1390,7 @@ function onSheetClick(ev) {
   else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();
   else if (a === 'trial') { closeSheet(); trialSheet(); }
-  else if (a === 'buyai') { if (S.inji < 300) return; S.inji -= 300; S.aiUntil = Math.max(now(), S.aiUntil) + 7 * 864e5; toast('AI 법률비서 7일 · AUTO 공격력 90% + 스킬 사용'); SFX.play('coin'); refreshSheet(); }
+  else if (a === 'buyai') { if (S.inji < 300) return; S.inji -= 300; S.aiUntil = Math.max(now(), S.aiUntil) + 7 * 864e5; toast('AI 법률비서 7일 · AUTO 공격력 100% + 스킬 사용'); SFX.play('coin'); refreshSheet(); }
   else if (a === 'useboost') { if (!S.boosters) { toast('부스터가 없습니다 · 상점에서 구매'); return; } S.boosters--; S.boostUntil = Math.max(now(), S.boostUntil) + 30 * 60000; toast('경험치 2배 30분!'); SFX.play('level'); refreshSheet(); }
   else if (a === 'buyboost') { if (S.inji < 150) return; S.inji -= 150; S.boosters++; toast('경험치 부스터 구매 · 가방에서 사용'); SFX.play('coin'); refreshSheet(); }
   else if (a === 'tmusic') { S.music = !S.music; BGM.setOn(S.music); refreshSheet(); }
@@ -1557,7 +1558,7 @@ function init() {
   $('#b-home').addEventListener('click', () => { if (homeArm && now() - homeArm < 2500) { homeArm = 0; returnTown(); } else { homeArm = now(); $('#b-home').textContent = '귀환?'; $('#b-home').classList.add('warn'); setTimeout(() => { if (homeArm && now() - homeArm >= 2400) { homeArm = 0; } $('#b-home').textContent = '귀환'; $('#b-home').classList.remove('warn'); }, 2500); } });
   $('#b-auto').addEventListener('click', () => {
     if (!S.auto && scene === 'stage' && W && (W.surv || !S.cleared[W.id])) { toast(W.surv ? '서바이벌은 직접!' : '처음 해결하는 사건은 직접! AUTO는 해결한 사건에서만 켜집니다'); showGuide('g_auto'); SFX.play('deny'); return; }
-    S.auto = !S.auto; resetKeys(); toast(S.auto ? `자동 사냥 켬 · 공격력 ${aiOn() ? '90% · 스킬 사용 (AI 법률비서)' : '60% · 스킬 안 씀'}` : '자동 사냥 끔'); if (S.auto) showGuide('g_auto');
+    S.auto = !S.auto; resetKeys(); toast(S.auto ? `자동 사냥 켬 · 공격력 ${aiOn() ? '100% · 스킬 사용 (AI 법률비서)' : '80% · 스킬 안 씀'}` : '자동 사냥 끔'); if (S.auto) showGuide('g_auto');
   });
   $('#b-sound').addEventListener('click', () => { SFX.init(); S.sound = !S.sound; SFX.on = S.sound; S.music = S.sound; BGM.setOn(S.music); });
   $('#g-ok').addEventListener('click', closeGuide);
