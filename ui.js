@@ -1267,6 +1267,7 @@ function optTab() {
   <div class="card"><h3>소리 · 편의</h3>
     <div class="stat"><span><b>배경음악</b><br><span class="note">맵마다 다른 곡. assets/bgm 에 mp3를 넣으면 그 곡으로 바뀝니다.</span></span><span></span><button class="btn sm ${S.music ? '' : 'ghost'}" data-act="tmusic">${S.music ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>그래픽</b><br><span class="note">렉이 있으면 「낮음」. 「자동」은 렉을 감지해 스스로 낮춰요${GFX === 'auto' ? ` · 지금 ${['높음', '중간', '낮음'][gfxLevel]}` : ''}</span></span><span></span><span class="row" style="gap:3px;flex-wrap:wrap;justify-content:flex-end">${[['auto', '자동'], ['high', '높음'], ['mid', '중간'], ['low', '낮음']].map(([k, n]) => `<button class="btn sm ${GFX === k ? '' : 'ghost'}" data-gfx="${k}">${n}</button>`).join('')}</span></div>
+    <div class="stat"><span><b>조작부 높이</b><br><span class="note">공격·점프 버튼이나 화면 아래가 가리면 「높게」. 이 기기에만 적용</span></span><span></span><span class="row" style="gap:3px;flex-wrap:wrap;justify-content:flex-end">${LIFTS.map(([v, n]) => `<button class="btn sm ${ctrlLift === v ? '' : 'ghost'}" data-lift="${v}">${n}</button>`).join('')}</span></div>
     <div class="stat"><span><b>효과음</b></span><span></span><button class="btn sm ${S.sound ? '' : 'ghost'}" data-act="tsound">${S.sound ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>일반 장비 자동 판매</b><br><span class="note">끼고 있는 것보다 약한 일반 등급은 줍자마자 판매</span></span><span></span><button class="btn sm ${S.autoSell ? '' : 'ghost'}" data-act="tsell">${S.autoSell ? '켬' : '끔'}</button></div></div>
   <div class="card hot"><h3>버그 제보 <span class="note">테스트 v${GAME_VERSION}</span></h3>
@@ -1497,6 +1498,7 @@ function onSheetClick(ev) {
   if (d.pack) { buyInji(d.pack); return; }
   if (d.kakha !== undefined) { closeSheet(); enterKakha(+d.kakha); return; }
   if (d.gfx) { setGfx(d.gfx); refreshSheet(); return; }
+  if (d.lift !== undefined) { ctrlLift = +d.lift; try { localStorage.setItem(LIFT_KEY, ctrlLift); } catch (e) { /* 무시 */ } layout(); refreshSheet(); return; }
   if (d.bbook) { const cost = d.bbook === 'b2' ? 300 : 800; if (S.inji < cost) return; S.inji -= cost; S.books[d.bbook]++; toast(`${BOOKS[d.bbook].name} 구매`); SFX.play('coin'); refreshSheet(); return; }
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
@@ -1655,8 +1657,17 @@ function chooseMajor() {
   openSheet('어느 학부에서 시작할까요?', [], () => `<p class="note">학부는 시작 스탯과 작은 보너스를 정합니다. 어느 학부든 모든 직업이 될 수 있습니다.</p>
     <div class="choices">${MAJORS.map((m) => `<button class="choice" data-major="${m.id}"><img src="assets/hero_student.png" alt=""><span><span class="t">${m.name}</span><br><span class="d">${esc(m.pro)} · 논리력 ${m.law.log} · 멘탈 ${m.law.men} · 집중력 ${m.law.foc} · 순발력 ${m.law.agi}</span></span></button>`).join('')}</div>`, null, 'major');
 }
+// 화면 아래 안전 영역(제스처 막대 등) 높이: CSS env()는 JS에서 바로 못 읽어서 보이지 않는 요소로 잰다
+let safeProbe = null;
+function safeBottom() {
+  if (!safeProbe) { safeProbe = document.createElement('div'); safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)'; document.body.appendChild(safeProbe); }
+  return parseFloat(window.getComputedStyle(safeProbe).paddingBottom) || 0;
+}
 function layout() {
-  const app = $('#app'); const ww = Math.min(window.innerWidth, 1100), wh = window.innerHeight;
+  // 실제로 쓸 수 있는 크기 = #app 안쪽 (카메라 구멍 등 위쪽 안전 영역을 뺀다)
+  const app = $('#app'), cs = window.getComputedStyle(app);
+  document.documentElement.style.setProperty('--lift', `${ctrlLift}px`);
+  const ww = Math.min(app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), 1100), wh = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   const land = ww / wh > 1.25;
   app.classList.toggle('land', land);
   const view = $('#view');
@@ -1664,7 +1675,11 @@ function layout() {
   const HUD = 46;
   let cssScale;
   if (land) { view.style.height = '100%'; cssScale = wh / VH; }
-  else { cssScale = clamp(ww / 330, 0.85, 1.8); view.style.height = `${Math.round(clamp(wh * 0.64, VH * cssScale + HUD, wh - 260))}px`; }
+  else {   // 세로: 조작부(버튼 260 + 띄움 높이 + 아래 안전 영역)를 먼저 확보하고, 게임 화면은 남는 만큼. 모자라면 게임 화면을 줄인다
+    cssScale = clamp(ww / 330, 0.85, 1.8);
+    const vh = Math.round(Math.max(160, Math.min(Math.max(VH * cssScale + HUD, wh * 0.6), wh - 262 - ctrlLift - safeBottom())));
+    cssScale = Math.min(cssScale, (vh - HUD) / VH); view.style.height = `${vh}px`;
+  }
   const c = $('#game'); const r = view.getBoundingClientRect();
   c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
   scale = cssScale * dpr;

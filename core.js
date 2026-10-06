@@ -113,10 +113,14 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.0-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.1-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
+// 조작부 높이 (기기마다 따로): 화면 아래 막대·둥근 모서리에 버튼이 가리는 폰을 위해 조작부 전체를 띄운다
+const LIFT_KEY = 'lawyer-lift', LIFTS = [[0, '낮게'], [20, '기본'], [44, '높게'], [72, '더 높게']];
+let ctrlLift = 20;
+try { const v = localStorage.getItem(LIFT_KEY); if (v != null && !isNaN(+v)) ctrlLift = +v; } catch (e) { /* 기본값 */ }
 try { GFX = localStorage.getItem(GFX_KEY) || 'auto'; gfxLevel = GFX === 'auto' ? Math.min(2, +(localStorage.getItem(GFX_LV_KEY) || 0)) : ({ high: 0, mid: 1, low: 2 }[GFX] ?? 0); } catch (e) { /* 기본값 */ }
 const fxMul = () => (gfxLevel >= 2 ? 0.5 : 1);
 const SAVE_KEY = 'lawyer-action-v5';            // v5.2까지 쓰던 단일 저장 (슬롯 1로 옮긴다)

@@ -8,11 +8,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.0-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.1-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0;background:#05060c;overscroll-behavior:none}[hidden]{display:none!important}</style>
+<style>html,body{margin:0;background:#05060c;overscroll-behavior:none}[hidden]{display:none!important}</style>
 </head>
 <body>
 <title>법조인 키우기</title>
@@ -41,11 +41,14 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }   /* 카카오�
   --font-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   color-scheme: dark;
+  --lift: 20px;   /* 조작부를 화면 아래에서 띄우는 높이 (설정 → 조작부 높이) */
+  --sb: calc(env(safe-area-inset-bottom, 0px) + var(--lift));
 }
 html, body { height: 100%; }
+@supports (height: 100dvh) { html, body { height: 100dvh; } }   /* 브라우저 아래 막대에 가리지 않게 실제로 보이는 높이 */
 body { background: var(--ink); color: var(--fg); font-family: var(--font-body); font-size: 15px; overflow: hidden; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 button { font: inherit; color: inherit; }
-#app { position: relative; height: 100%; display: flex; flex-direction: column; background: #070910; max-width: 1100px; margin: 0 auto; }
+#app { position: relative; height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); display: flex; flex-direction: column; background: #070910; max-width: 1100px; margin: 0 auto; }
 #view { position: relative; width: 100%; background: #000; flex: none; touch-action: none; }
 #game { display: block; width: 100%; height: 100%; image-rendering: auto; }
 /* HUD */
@@ -105,19 +108,19 @@ button { font: inherit; color: inherit; }
 #skills .pbtn.sk:not(#b-ult):not(#b-hp) { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c, #fff) 70%, transparent); }
 #b-ult { background: rgba(255,228,92,.14); }
 /* 위치 = 공격 버튼 중심(오른쪽 52, 아래 54)에서 반지름 116(안쪽)·180(바깥), 버튼 간격 14px 이상 */
-#b-attack { width: 72px; height: 72px; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: rgba(229,83,61,.4); }
+#b-attack { width: 72px; height: 72px; right: 16px; bottom: calc(18px + var(--sb)); background: rgba(229,83,61,.4); }
 #b-attack .lbl { font-size: 19px; }
-#b-jump { width: 54px; height: 54px; right: 119px; bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+#b-jump { width: 54px; height: 54px; right: 119px; bottom: calc(5px + var(--sb)); }
 #b-s1, #b-s2, #b-s3 { width: 46px; height: 46px; }
 #b-s4, #b-hp { width: 42px; height: 42px; }
 #b-ult { width: 48px; height: 48px; }
-#b-s1 { right: 120px; bottom: calc(102px + env(safe-area-inset-bottom, 0px)); }
-#b-s2 { right: 73px; bottom: calc(139px + env(safe-area-inset-bottom, 0px)); }
-#b-s3 { right: 13px; bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
-#b-s4 { right: 200px; bottom: calc(95px + env(safe-area-inset-bottom, 0px)); }
-#b-ult { right: 153px; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
-#b-hp { right: 87px; bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
-#stickhint { position: absolute; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); width: 92px; aspect-ratio: 1; border-radius: 50%; border: 2px dashed rgba(255,255,255,.16); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.35; color: var(--mute); pointer-events: none; opacity: .75; }
+#b-s1 { right: 120px; bottom: calc(102px + var(--sb)); }
+#b-s2 { right: 73px; bottom: calc(139px + var(--sb)); }
+#b-s3 { right: 13px; bottom: calc(146px + var(--sb)); }
+#b-s4 { right: 200px; bottom: calc(95px + var(--sb)); }
+#b-ult { right: 153px; bottom: calc(160px + var(--sb)); }
+#b-hp { right: 87px; bottom: calc(204px + var(--sb)); }
+#stickhint { position: absolute; left: 18px; bottom: calc(18px + var(--sb)); width: 92px; aspect-ratio: 1; border-radius: 50%; border: 2px dashed rgba(255,255,255,.16); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.35; color: var(--mute); pointer-events: none; opacity: .75; }
 #knobbase, #knob { position: absolute; display: none; pointer-events: none; z-index: 6; border-radius: 50%; }
 #knobbase { width: 88px; height: 88px; border: 2px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06); }
 #knob { width: 44px; height: 44px; background: rgba(255,228,92,.55); box-shadow: 0 0 12px rgba(255,228,92,.5); }
@@ -133,6 +136,7 @@ button { font: inherit; color: inherit; }
 #app.land #stickhint { opacity: .45; width: 84px; }
 #app.land #keys { display: none; }
 #app.land.dlg #skills, #app.land.dlg #acts, #app.land.dlg #stickhint { visibility: hidden; }
+#app.land #dialog { bottom: calc(8px + var(--sb)); }
 /* sheet (menus) */
 #sheet { position: absolute; inset: 0; background: rgba(5,7,16,.78); display: none; align-items: flex-end; justify-content: center; z-index: 20; }
 #sheet.show { display: flex; }
@@ -142,7 +146,7 @@ button { font: inherit; color: inherit; }
 #sheet .tabs { flex: none; display: flex; gap: 4px; padding: 8px 12px; overflow-x: auto; }
 #sheet .tabs button { border: 0; background: var(--panel-2); color: var(--mute); padding: 6px 12px; border-radius: 16px; cursor: pointer; white-space: nowrap; }
 #sheet .tabs button.on { background: var(--hl); color: var(--hl-ink); font-weight: 700; }
-#sheet .body { overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; padding: 4px 12px calc(16px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 10px; min-height: 0; }
+#sheet .body { overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; padding: 4px 12px calc(16px + var(--sb)); display: grid; gap: 10px; min-height: 0; }
 .card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; min-width: 0; }
 .card h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 17px; }
 .card p, .note { margin: 0; font-size: 13px; color: var(--mute); line-height: 1.5; }
