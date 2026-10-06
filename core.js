@@ -543,6 +543,7 @@ function update(dt) {
 }
 function clearPressed() { for (const k of Object.keys(pressed)) delete pressed[k]; }
 const JUMP_V = 590, JUMP_H = JUMP_V * JUMP_V / 3000;
+const airJumps = () => (job().tier >= 2 ? (job().type === 'melee' ? 2 : 1) : 0);   // 공중에서 더 뛸 수 있는 횟수
 function platformsUnder(x, y0, y1, w = 0) {
   for (const p of W.platforms) if (x > p.x - w && x < p.x + p.w + w && y0 <= p.y + 0.5 && y1 >= p.y) return p;
   return null;
@@ -568,7 +569,7 @@ function updatePlayer(dt) {
   // 밧줄 잡기: 밧줄 앞에서 ↑, 밧줄 위 발판에서 ↓ (공중에서도 ↑로 잡는다)
   if (!p.climb && (keys.up || keys.down) && p.dashT <= 0 && p.hurtT <= 0 && p.ropeCd <= 0) {
     const r = ropeAt(p.x, p.y - (keys.down ? 0 : 6));
-    if (r && !(keys.down && p.y >= r.y1 - 1) && !(keys.up && p.y <= r.y0 + 1)) { p.climb = r; p.x = r.x; p.vx = 0; p.vy = 0; p.onGround = false; p.atkT = 0; p.grabT = 0.2; p.dj = false; p.flashT = 0; }
+    if (r && !(keys.down && p.y >= r.y1 - 1) && !(keys.up && p.y <= r.y0 + 1)) { p.climb = r; p.x = r.x; p.vx = 0; p.vy = 0; p.onGround = false; p.atkT = 0; p.grabT = 0.2; p.dj = 0; p.flashT = 0; }
   }
   if (p.climb) {
     const r = p.climb; p.x = r.x; p.vx = 0; p.grabT = Math.max(0, (p.grabT || 0) - dt);
@@ -599,11 +600,13 @@ function updatePlayer(dt) {
   // 아래로 내려가기 (발판에서 ↓ 또는 ↓+점프)
   if (p.onGround && p.plat && (pressed.down || (keys.down && pressed.jump))) { p.dropT = 0.28; p.onGround = false; p.vy = 60; p.plat = null; }
   // 점프: X·Space·점프 버튼 또는 ↑(밧줄 앞이 아닐 때)
-  else if ((pressed.jump || pressed.up) && p.onGround && p.dashT <= 0) { p.vy = -JUMP_V; p.onGround = false; p.dj = false; SFX.play('jump'); fxDust(p.x, p.y); }
-  // 근거리 2단 점프: 공중에서 한 번 더 누르면 바라보는(누른) 방향으로 도약. 높이는 조금만 (밧줄 층은 못 넘는다)
-  else if ((pressed.jump || pressed.up) && !p.onGround && !p.dj && job().type === 'melee' && p.dashT <= 0 && p.hurtT <= 0) {
-    const dir = ax || p.face; p.dj = true; p.face = dir; p.vy = -260; p.flashT = 0.3; p.flashV = dir * 430; p.trailT = 0;
-    W.fx.push({ k: 'ring', x: p.x, y: p.y - 6, r: 26, t: 0, dur: 0.3, color: job().color }); SFX.play('jump'); fxDust(p.x, p.y);
+  else if ((pressed.jump || pressed.up) && p.onGround && p.dashT <= 0) { p.vy = -JUMP_V; p.onGround = false; p.dj = 0; SFX.play('jump'); fxDust(p.x, p.y); }
+  // 공중 점프: 2차 전직부터 모두 2단 점프, 근거리는 3단(누른 쪽으로 도약). 높이는 조금씩만: 2단은 금고층(150)에 못 닿고, 근거리 3단은 겨우 닿는다
+  else if ((pressed.jump || pressed.up) && !p.onGround && (p.dj || 0) < airJumps() && p.dashT <= 0 && p.hurtT <= 0) {
+    p.dj = (p.dj || 0) + 1;
+    if (job().type === 'melee') { const dir = ax || p.face; p.face = dir; p.vy = -270; p.flashT = 0.3; p.flashV = dir * 430; p.trailT = 0; }
+    else p.vy = Math.min(p.vy, -300);
+    W.fx.push({ k: 'ring', x: p.x, y: p.y - 6, r: 22 + 6 * p.dj, t: 0, dur: 0.3, color: job().color }); SFX.play('jump'); fxDust(p.x, p.y);
   }
   p.vy = Math.min(720, p.vy + 1500 * dt);
   const oldY = p.y;
@@ -612,7 +615,7 @@ function updatePlayer(dt) {
   if (p.y >= GROUND) { p.y = GROUND; p.vy = 0; p.onGround = true; p.plat = null; }
   else if (p.vy >= 0 && p.dropT <= 0) { const pl = platformsUnder(p.x, oldY, p.y); if (pl) { p.y = pl.y; p.vy = 0; p.onGround = true; p.plat = pl; } }
   if (p.onGround && p.plat && (p.x < p.plat.x - 2 || p.x > p.plat.x + p.plat.w + 2)) { p.onGround = false; p.plat = null; }
-  if (p.onGround) { p.dj = false; p.flashT = 0; }
+  if (p.onGround) { p.dj = 0; p.flashT = 0; }
   if (p.onGround && !wasGround) { p.landT = 0.12; fxDust(p.x, p.y); }
   let minX = 14, maxX = W.len - 14;
   if (W.lock) { minX = W.lock[0] + 14; maxX = W.lock[1] - 14; }
