@@ -294,14 +294,17 @@ function bindInput() {
     if (ev.code === 'Escape' || ev.code === 'KeyM') { if ($('#guide').classList.contains('show')) { closeGuide(); return; } if (sheetOpen()) tryCloseSheet(); else if (player && !dialog.active) openMenu(); return; }
     if (ev.code === 'KeyW') { useCons('coffee'); return; }
     if ($('#guide').classList.contains('show') && (ev.code === 'Space' || ev.code === 'Enter')) { ev.preventDefault(); closeGuide(); return; }
-    if (dialog.active && (ev.code === 'Space' || ev.code === 'Enter' || ev.code === 'KeyX' || ev.code === 'KeyZ')) { ev.preventDefault(); dialogNext(); return; }
+    if (dialog.active && (ev.code === 'Space' || ev.code === 'Enter' || ev.code === 'KeyX' || ev.code === 'KeyZ')) { ev.preventDefault(); if (!ev.repeat) dialogNext(); return; }   // 꾹 누르고 있어도 한 줄씩
     const k = KEYMAP[ev.code]; if (!k) return; ev.preventDefault(); if (!ev.repeat) press(k); else keys[k] = true;
   });
   window.addEventListener('keyup', (ev) => { if (typing(ev)) return; const k = KEYMAP[ev.code]; if (k) release(k); });
   const map = { 'b-jump': 'jump', 'b-attack': 'attack', 'b-s1': 's1', 'b-s2': 's2', 'b-s3': 's3', 'b-s4': 's4', 'b-ult': 'ult', 'b-hp': 'potion', 'b-act': 'act' };
   for (const [id, k] of Object.entries(map)) {
     const el = document.getElementById(id); if (!el) continue;
-    const down = (ev) => { ev.preventDefault(); ev.stopPropagation(); SFX.init(); BGM.ensure(); el.classList.add('down'); press(k); try { el.setPointerCapture(ev.pointerId); } catch (e) { /* 무시 */ } };
+    const down = (ev) => {
+      ev.preventDefault(); ev.stopPropagation(); SFX.init(); BGM.ensure(); el.classList.add('down');
+      if (dialog.active && (k === 'attack' || k === 'act' || k === 'jump')) { dialogNext(); return; }   // 대화 중: 공격·점프 버튼 = 다음 (글자가 나오는 중이면 먼저 문장을 다 보여 준다)
+      press(k); try { el.setPointerCapture(ev.pointerId); } catch (e) { /* 무시 */ } };
     const up = (ev) => { ev.preventDefault(); el.classList.remove('down'); release(k); };
     el.addEventListener('pointerdown', down); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
     el.addEventListener('contextmenu', (ev) => ev.preventDefault());
