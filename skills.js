@@ -25,8 +25,9 @@ function meleeBox(face, r, h, dmg, o = {}) {
   for (const pr of W.props) { if (pr.dead || Math.abs(pr.y - p.y) > 50) continue; if (pr.x > x0 - 14 && pr.x < x0 + r + 22) hitProp(pr); }
   return n;
 }
-// 2차 전직부터 기본 공격 각성: 근거리 십자 2연타 · 원거리 2-3-5발 유도탄 · 중거리 쌍파동 · 사슬 2연타
-const basicAwake = () => job().tier >= 2;
+// 3차 승진(또는 히든 직업)부터 기본 공격 각성: 근거리 십자 2연타 · 원거리 2-3-5발 유도탄 · 중거리 쌍파동 · 사슬 2연타 (2·3단 점프는 2차부터)
+const awakeOf = (id) => !!S.rank[id] || JOBS[id].tier >= 3;
+const basicAwake = () => awakeOf(S.job);
 function crossHit(face, r, dmg, col, big) {   // 근거리·사슬 각성: 첫 타 직후 반대 대각선으로 한 번 더 (따닥)
   const p = player;
   later(0.07, () => {

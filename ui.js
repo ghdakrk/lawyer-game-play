@@ -112,7 +112,7 @@ function giveRewards(r) {
   if (r.unlock) { addJob(r.unlock); S.sp += 3; out.push(`직업: ${JOBS[r.unlock].name} · SP +3`); if (job().tier < JOBS[r.unlock].tier) changeJob(r.unlock); else checkPassives(); if (JOBS[r.unlock].tier === 2) for (const id of ['j2a', 'j2b', 'j2c']) if (qState(id) === 'active') delete S.q[id]; }
   if (r.rank) { S.rank[r.rank] = 1; S.sp += 5; out.push('SP +5'); checkPassives();
     if (S.job !== r.rank && JOBS[S.job].tier > JOBS[r.rank].tier) { statCache = null; toast(`${esc(jobName(r.rank))} 경력 인정 · 승진 패시브는 이력서에 꽂을 수 있어요`, 4000); }   // 히든 직업이 된 뒤 끝낸 승진: 직업은 그대로 (내려가지 않는다)
-    else if (S.job !== r.rank) changeJob(r.rank); else { statCache = null; showBanner(`3차 전직 · ${jobName()}`, `각성 궁극기 「${SKILLS[ultId()].name}」`); BGM.jingle('job'); } out.push(`승진: ${jobName(r.rank)}`); }
+    else if (S.job !== r.rank) changeJob(r.rank); else { statCache = null; showBanner(`3차 전직 · ${jobName()}`, `각성 궁극기 「${SKILLS[ultId()].name}」 · 스킬 Lv.10 개방`); BGM.jingle('job'); const jid = S.job; later(2.6, () => awakeBanner(jid)); later(5, () => showGuide('g_awake')); } out.push(`승진: ${jobName(r.rank)}`); }
   if (r.comp) { if (!S.comps.includes(r.comp)) S.comps.push(r.comp); if (S.party.length < S.slots && !S.party.includes(r.comp)) S.party.push(r.comp); out.push(`동료 ${COMPANIONS[r.comp].name}`); if (W && W.kind === 'stage') buildAllies(); }
   if (r.slots) { S.slots = Math.max(S.slots, r.slots); for (const c of S.comps) if (S.party.length < S.slots && !S.party.includes(c)) S.party.push(c); if (W && W.kind === 'stage') buildAllies(); }
   if (r.title && !S.titles.includes(r.title)) { S.titles.push(r.title); out.push(`칭호 「${r.title}」`); }
@@ -169,9 +169,12 @@ function changeJob(id) {
   showBanner(`전직 · ${jobName(id)}`, `${RANGE[JOBS[id].type].name} · ${RANGE[JOBS[id].type].d}`);
   SFX.play('level'); BGM.jingle('job');
   if (W && player) { fxSparkle(player.x, player.y - 30, JOBS[id].color, 30); W.fx.push({ k: 'pillar', x: player.x, w: 60, color: JOBS[id].color, t: 0, dur: 0.9 }); }
-  learnTrivia(JOB_TRIVIA[id]); if (JOBS[id].tier >= 2) showGuide('g_lock'); if (JOBS[id].mech === 'evidence') later(1.5, () => showGuide('g_evidence')); if (JOBS[id].tier >= 2) { const aw = AWAKE[JOBS[id].basic.k]; later(2.4, () => { showBanner(`기본 공격 각성 · ${aw.name}`, `${aw.d} · ${JOBS[id].type === 'melee' ? '3단' : '2단'} 점프`); if (W && player) fxRing(player.x, player.y - 30, 70, JOBS[id].color); SFX.play('skill'); }); later(4.6, () => showGuide('g_dj')); }
+  learnTrivia(JOB_TRIVIA[id]); if (JOBS[id].tier >= 2) showGuide('g_lock'); if (JOBS[id].mech === 'evidence') later(1.5, () => showGuide('g_evidence')); if (JOBS[id].tier >= 2) { later(2.4, () => (awakeOf(id) ? awakeBanner(id) : jumpBanner(id))); later(4.6, () => showGuide(awakeOf(id) ? 'g_awake' : 'g_dj')); }
   checkGuides(); updateBadges(); save();
 }
+// 2차: 점프 해금 · 3차 승진(히든): 기본 공격 각성
+function jumpBanner(id) { const aw = AWAKE[JOBS[id].basic.k]; showBanner(`${JOBS[id].type === 'melee' ? '3단' : '2단'} 점프 해금`, `공중에서 점프를 한 번 더 · 3차 승진하면 기본 공격 각성 「${aw.name}」`); if (W && player) fxRing(player.x, player.y - 30, 50, JOBS[id].color); }
+function awakeBanner(id) { const aw = AWAKE[JOBS[id].basic.k]; showBanner(`기본 공격 각성 · ${aw.name}`, aw.d); if (W && player) { fxRing(player.x, player.y - 30, 80, JOBS[id].color); fxSparkle(player.x, player.y - 40, JOBS[id].color, 24); } SFX.play('skill'); }
 // 패시브 해금 확인
 function checkPassives() {
   const fresh = [];
@@ -960,7 +963,7 @@ function skillTab() {
   <div class="card"><div class="row between"><h3>${esc(jobName())}의 스킬 배우기</h3><b style="color:var(--hl)">SP ${S.sp}</b></div>
     <p>비급: 초급 ${S.books.b1 || 0} · 중급 ${S.books.b2 || 0} · 고급 ${S.books.b3 || 0}. 스킬 레벨당 피해 +12%. Lv5 강화 · Lv7 각성(새 기능) · Lv10 마스터(재사용·커피 −20%).</p>
     ${rows}
-    ${j.tier >= 2 ? `<div class="skrow"><div class="skic" style="--c:${j.color}">Z</div><div><b>기본 공격 각성 · ${esc(AWAKE[j.basic.k].name)}</b> <span class="lvtag">2차</span><br><span class="note">${esc(AWAKE[j.basic.k].d)}</span></div></div>` : `<div class="skrow locked"><div class="skic">Z</div><div><b>기본 공격 각성</b> <span class="note">2차 전직하면</span><br><span class="note">근거리 십자 2연타 · 원거리 유도탄 2·3·5발 · 중거리 쌍파동</span></div></div>`}
+    ${(() => { const aw = AWAKE[j.basic.k]; return awakeOf(S.job) ? `<div class="skrow"><div class="skic" style="--c:${j.color}">Z</div><div><b>기본 공격 각성 · ${esc(aw.name)}</b> <span class="lvtag">3차</span><br><span class="note">${esc(aw.d)}</span></div></div>` : `<div class="skrow locked"><div class="skic">Z</div><div><b>기본 공격 각성 · ${esc(aw.name)}</b> <span class="note">${j.tier >= 2 ? '3차 승진(또는 히든 직업)하면' : '2차 진로를 고른 뒤 3차 승진하면'}</span><br><span class="note">${esc(aw.d)}</span></div></div>`; })()}
     <div class="skrow"><div class="skic ult" style="--c:${j.color}">F</div><div><b>${esc(u.name)}</b> <span class="lvtag">${u.awak ? '각성 궁극기' : '궁극기'}</span> <span class="tag">${esc(u.tag || '')}</span><br><span class="note">${esc(u.d)} · 공격력의 ${Math.round(u.mult * 100)}% · 적을 때리면 게이지가 찹니다</span>${j.rank && !S.rank[S.job] ? `<br><span class="note">Lv.30 승진(3차 전직)하면 「${esc(SKILLS[j.rank.ult].name)}」으로 각성</span>` : ''}</div></div></div>`;
 }
 function resumeTab() {

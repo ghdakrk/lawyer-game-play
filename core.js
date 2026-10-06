@@ -485,7 +485,7 @@ function mobLevel(m) { return recLv(W.g) + (W.tier ? TIERS[W.tier].lv : 0) + (S.
 function foeMul(boss) {
   if (!W || W.surv || W.kakha) return { hp: 1, dmg: 1 };
   let hp = 1, dmg = 1;
-  if (W.c >= 3) { const k = Math.min(W.c, 5) - 3; hp *= [1.2, 1.3, 1.35][k]; dmg *= [1.05, 1.08, 1.1][k]; }   // 3장은 각성 효과를 느끼게 조금만, 갈수록 세게
+  if (W.c >= 3) { const k = Math.min(W.c, 5) - 3; hp *= [1.1, 1.2, 1.25][k]; dmg *= [1, 1.05, 1.08][k]; }   // 기본 공격 각성(3차 승진)은 5장 중반이라 3·4장은 조금만, 갈수록 세게
   if (W.s === 5) { hp *= boss ? 1.25 : 1.2; dmg *= boss ? 1.1 : 1; }
   return { hp, dmg };
 }
