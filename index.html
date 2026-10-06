@@ -91,7 +91,7 @@ button { font: inherit; color: inherit; }
 /* pad: 공격 버튼을 중심으로 스킬을 두 겹 부채꼴로 (버튼끼리 20px 이상 띄움) */
 #pad { position: relative; flex: 1; min-height: 0; background: radial-gradient(120% 90% at 50% 0%, #12162a, #070910); touch-action: none; }
 #skills, #acts { position: absolute; inset: 0; pointer-events: none; }
-.pbtn { position: absolute; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 2px rgba(255,255,255,.2); color: #fff; font-family: var(--font-display); display: grid; place-items: center; touch-action: none; cursor: pointer; overflow: hidden; padding: 0; pointer-events: auto; }
+.pbtn { z-index: 3; position: absolute; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 2px rgba(255,255,255,.2); color: #fff; font-family: var(--font-display); display: grid; place-items: center; touch-action: none; cursor: pointer; overflow: hidden; padding: 0; pointer-events: auto; }
 .pbtn.down { background: rgba(255,228,92,.38); }
 .pbtn .lbl { font-size: 12px; line-height: 1.12; text-align: center; pointer-events: none; padding: 0 3px; position: relative; z-index: 1; word-break: keep-all; }
 .pbtn .key { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-family: var(--font-body); font-size: 9px; opacity: .5; z-index: 1; }
@@ -107,12 +107,13 @@ button { font: inherit; color: inherit; }
 #b-attack .lbl { font-size: 19px; }
 #b-jump { width: 54px; height: 54px; right: 119px; bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
 #b-s1, #b-s2, #b-s3 { width: 46px; height: 46px; }
-#b-s4, #b-ult, #b-hp { width: 42px; height: 42px; }
+#b-s4, #b-hp { width: 42px; height: 42px; }
+#b-ult { width: 48px; height: 48px; }
 #b-s1 { right: 120px; bottom: calc(102px + env(safe-area-inset-bottom, 0px)); }
 #b-s2 { right: 73px; bottom: calc(139px + env(safe-area-inset-bottom, 0px)); }
 #b-s3 { right: 13px; bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
 #b-s4 { right: 200px; bottom: calc(95px + env(safe-area-inset-bottom, 0px)); }
-#b-ult { right: 156px; bottom: calc(163px + env(safe-area-inset-bottom, 0px)); }
+#b-ult { right: 153px; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 #b-hp { right: 87px; bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
 #stickhint { position: absolute; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); width: 92px; aspect-ratio: 1; border-radius: 50%; border: 2px dashed rgba(255,255,255,.16); display: grid; place-items: center; text-align: center; font-size: 12px; line-height: 1.35; color: var(--mute); pointer-events: none; opacity: .75; }
 #knobbase, #knob { position: absolute; display: none; pointer-events: none; z-index: 6; border-radius: 50%; }
@@ -184,8 +185,8 @@ button.slot { font: inherit; color: inherit; }
 .tbl td, .tbl th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: right; } .tbl td:first-child, .tbl th:first-child { text-align: left; }
 button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 /* quest tracker */
-#qtrack { position: absolute; left: 8px; top: 60px; max-width: min(48%, 260px); display: grid; gap: 2px; pointer-events: auto; cursor: pointer; z-index: 2; }
-#qtrack .qt { box-sizing: border-box; font-size: 12px; line-height: 1.35; background: rgba(8,10,22,.62); border-left: 3px solid var(--mute); border-radius: 4px; padding: 2px 6px; text-shadow: 0 1px 2px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#qtrack { position: absolute; left: 8px; top: 60px; max-width: min(48%, 260px); display: grid; gap: 2px; pointer-events: none; cursor: pointer; z-index: 2; }
+#qtrack .qt { pointer-events: auto; box-sizing: border-box; font-size: 12px; line-height: 1.35; background: rgba(8,10,22,.62); border-left: 3px solid var(--mute); border-radius: 4px; padding: 2px 6px; text-shadow: 0 1px 2px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #qtrack .qt b { color: #fff; font-weight: 600; }
 #qtrack .qt.main { border-color: var(--hl); } #qtrack .qt.job { border-color: #c48cff; } #qtrack .qt.comp { border-color: #6aa9ff; } #qtrack .qt.client { border-color: #7ee08a; } #qtrack .qt.hidden { border-color: #ff8a73; }
 #qtrack .qt.ok { border-color: var(--exp); color: var(--exp); }

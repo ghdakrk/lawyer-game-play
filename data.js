@@ -28,14 +28,14 @@ const HEAD = {"atlas_heroes/student":[[122,9,84],[124,5,84],[127,5,85],[138,27,9
 // ======================================================================
 const COS_ATLAS = { cw: 154, ch: 139, sizes: [[139, 100], [113, 99], [135, 84], [118, 119], [138, 97], [116, 76], [121, 112], [129, 91], [137, 112], [135, 99], [150, 98], [135, 135]] };
 const COSMETICS = {
-  gradcap: { name: '학사모', slot: 'head', i: 0, grade: 1, sc: 1.15, dy: 0.4, dx: 0.02, st: { exp: 0.05 } },
-  crown: { name: '황금 왕관', slot: 'head', i: 1, grade: 4, sc: 0.8, dy: 0.27, dx: 0.04, st: { atkPct: 0.08, gold: 0.05 } },
-  headband: { name: '필승 머리띠', slot: 'head', i: 2, grade: 2, sc: 1.1, dy: 0.5, dx: -0.04, st: { spd: 0.05 } },
-  catphone: { name: '고양이 헤드폰', slot: 'head', i: 3, grade: 2, sc: 1.15, dy: 0.62, dx: 0, st: { mprPct: 0.15 } },
+  gradcap: { name: '학사모', slot: 'head', i: 0, grade: 1, sc: 1.15, dy: 0.56, dx: 0.02, st: { exp: 0.05 } },
+  crown: { name: '황금 왕관', slot: 'head', i: 1, grade: 4, sc: 0.8, dy: 0.37, dx: 0.04, st: { atkPct: 0.08, gold: 0.05 } },
+  headband: { name: '필승 머리띠', slot: 'head', i: 2, grade: 2, sc: 1.1, dy: 0.69, dx: -0.04, st: { spd: 0.05 } },
+  catphone: { name: '고양이 헤드폰', slot: 'head', i: 3, grade: 2, sc: 1.15, dy: 0.76, dx: 0, st: { mprPct: 0.15 } },
   halo: { name: '천사 링', slot: 'head', i: 4, grade: 3, sc: 0.9, dy: -0.12, dx: 0, float: true, st: { hpPct: 0.06 } },
-  horns: { name: '악마 뿔', slot: 'head', i: 5, grade: 3, sc: 0.95, dy: 0.3, dx: 0.04, st: { crit: 0.04 } },
-  wig: { name: '법정 가발', slot: 'head', i: 6, grade: 3, sc: 1.2, dy: 0.62, dx: -0.02, st: { skill: 0.06 } },
-  policecap: { name: '경찰 모자', slot: 'head', i: 7, grade: 2, sc: 1.15, dy: 0.42, dx: 0.04, st: { dr: 0.03 } },
+  horns: { name: '악마 뿔', slot: 'head', i: 5, grade: 3, sc: 0.95, dy: 0.41, dx: 0.04, st: { crit: 0.04 } },
+  wig: { name: '법정 가발', slot: 'head', i: 6, grade: 3, sc: 1.2, dy: 0.68, dx: -0.02, st: { skill: 0.06 } },
+  policecap: { name: '경찰 모자', slot: 'head', i: 7, grade: 2, sc: 1.15, dy: 0.56, dx: 0.04, st: { dr: 0.03 } },
   cape: { name: '영웅 망토', slot: 'back', i: 8, grade: 2, sc: 0.95, ox: -0.38, oy: 1.25, st: { hpPct: 0.05 } },
   angel: { name: '천사 날개', slot: 'back', i: 9, grade: 3, sc: 1.25, ox: -0.3, oy: 1.05, flap: true, st: { spd: 0.06 } },
   batwing: { name: '박쥐 날개', slot: 'back', i: 10, grade: 3, sc: 1.3, ox: -0.3, oy: 1.0, flap: true, st: { atkPct: 0.05 } },

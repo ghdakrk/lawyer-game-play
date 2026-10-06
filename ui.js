@@ -577,7 +577,7 @@ function drawCos(slot, pose, x, y, h, face, t) {
   const dw = hw * c.sc, dh = dw * ih / iw;
   ctx.save();
   if (slot === 'head') {
-    const by = c.float ? hy + hw * 0.02 + Math.sin(t * 3) * 1 : hy + c.dy * hw;
+    const by = c.float ? hy + hw * 0.1 + Math.sin(t * 3) * 1 : hy + c.dy * hw;   // 모자는 머리에 맞게 눌러 쓰고, 천사 링만 살짝 뜬다
     ctx.translate(hx + (pose.back ? 0 : flip * (c.dx || 0) * hw), by); ctx.scale(flip, 1);
     if (c.float) { ctx.globalCompositeOperation = 'lighter'; }
     ctx.drawImage(img, sx0, sy0, iw, ih, -dw / 2, -dh, dw, dh);
@@ -818,7 +818,7 @@ function fitQtrack() {
   for (const ln of el.children) {
     ln.style.maxWidth = '';
     const r = ln.getBoundingClientRect(); let right = Infinity;
-    for (const b of btns) if (b.bottom > r.top - 2 && b.top < r.bottom + 2 && b.right > r.left) right = Math.min(right, b.left - 6);
+    for (const b of btns) if (b.bottom > r.top - 8 && b.top < r.bottom + 8 && b.right > r.left) right = Math.min(right, b.left - 14);   // 손가락 여유
     if (right < r.right) ln.style.maxWidth = Math.max(90, right - r.left) + 'px';
   }
 }

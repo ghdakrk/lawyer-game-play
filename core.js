@@ -71,20 +71,24 @@ function compPortrait(id) { const c = COMPANIONS[id]; return c.boss ? 'assets/bo
 // ======================================================================
 const SFX = {
   ctx: null, on: true, last: {},
-  init() { if (this.ctx) return; try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; } },
+  init() {
+    if (this.ctx) return;
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; return; }
+    this.bus = this.ctx.createGain(); this.bus.gain.value = 0.55; this.bus.connect(this.ctx.destination);   // 효과음은 한 단계 낮춰 배경음악이 묻히지 않게
+  },
   play(type) {
     if (!this.on || !this.ctx) return;
     const tnow = performance.now(); if (this.last[type] && tnow - this.last[type] < 40) return; this.last[type] = tnow;
     const c = this.ctx, t = c.currentTime;
     const tone = (f0, f1, dur, wave = 'square', vol = 0.08, at = 0) => {
       const o = c.createOscillator(), g = c.createGain(); o.type = wave; o.frequency.setValueAtTime(f0, t + at); o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + at + dur);
-      g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.001, t + at + dur); o.connect(g).connect(c.destination); o.start(t + at); o.stop(t + at + dur + 0.02);
+      g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.001, t + at + dur); o.connect(g).connect(this.bus); o.start(t + at); o.stop(t + at + dur + 0.02);
     };
     const noise = (dur, vol = 0.12, hp = 800) => {
       const len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
       const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = vol;
-      s.connect(f).connect(g).connect(c.destination); s.start(t);
+      s.connect(f).connect(g).connect(this.bus); s.start(t);
     };
     switch (type) {
       case 'swing': noise(0.09, 0.07, 2500); break;

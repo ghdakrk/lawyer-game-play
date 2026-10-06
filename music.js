@@ -28,7 +28,7 @@ const BGM = {
   ensure() {
     if (this.ctx) return true;
     SFX.init(); if (!SFX.ctx) return false;
-    this.ctx = SFX.ctx; this.out = this.ctx.createGain(); this.out.gain.value = 0.16 * this.vol; this.out.connect(this.ctx.destination);
+    this.ctx = SFX.ctx; this.out = this.ctx.createGain(); this.out.gain.value = 0.3 * this.vol; this.out.connect(this.ctx.destination);
     return true;
   },
   setOn(v) { this.on = v; if (!v) this.stop(true); else if (this.key) { const k = this.key; this.key = null; this.play(k); } },
@@ -38,7 +38,7 @@ const BGM = {
     if (!this.on || !SONGS[key] && !BGM_FILES[key]) return;
     if (!this.ensure()) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
-    if (BGM_FILES[key]) { const a = new Audio(BGM_FILES[key]); a.loop = true; a.volume = 0.45 * this.vol; a.play().catch(() => { }); this.el = a; return; }
+    if (BGM_FILES[key]) { const a = new Audio(BGM_FILES[key]); a.loop = true; a.volume = Math.min(1, 0.85 * this.vol); a.play().catch(() => { }); this.el = a; return; }
     this.song = SONGS[key]; this.lead = this.song.lead.split(/\s+/); this.step = 0; this.nextT = this.ctx.currentTime + 0.08;
     this.timer = setInterval(() => this.tick(), 30);
   },
