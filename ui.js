@@ -1061,12 +1061,66 @@ const STORE = [
   { id: 'deluxe', name: '디럭스 에디션', price: 6900, all: true, d: '위 다섯 가지 전부 (따로 사면 ₩10,400)' },
 ];
 const won = (n) => `₩${n.toLocaleString('ko-KR')}`;
+// 앱(안드로이드) 뒤로 가기: 창이 열려 있으면 닫고, 게임 중이면 메뉴, 타이틀에서는 앱 종료
+function appHooks() {
+  const C = window.Capacitor; if (!C || !C.isNativePlatform || !C.isNativePlatform()) return;
+  const App = (C.Plugins && C.Plugins.App) || (C.registerPlugin && C.registerPlugin('App')); if (!App) return;
+  App.addListener('backButton', () => {
+    if ($('#guide').classList.contains('show')) { closeGuide(); return; }
+    if (dialog.active) { dialogNext(); return; }
+    if (sheetOpen()) { tryCloseSheet(); return; }
+    if (player && S.major) { openMenu(); return; }
+    App.exitApp();
+  });
+}
+// ---------- 스토어 결제 ----------
+// 앱(Capacitor): RevenueCat → 구글 플레이 결제 / StoreKit. 웹(테스트 링크): 결제 없이 바로 지급
+// 출시 때 RevenueCat 공개 SDK 키를 넣는다 (docs/12-app-release.md). 키가 비어 있으면 앱에서도 테스트 모드
+const RC_KEY = { android: '', ios: '' };
+const PRODUCT_ID = { starter: 'starter_pack', ai: 'ai_secretary', slots: 'save_slots', cos_court: 'cos_court', cos_angel: 'cos_angel', deluxe: 'deluxe_edition',
+  p1: 'inji_120', p2: 'inji_600', p3: 'inji_1250', p4: 'inji_3900', monthly: 'monthly_office' };
+const Billing = {
+  rc: null, ready: false, busy: false,
+  native() { const C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); },
+  async init() {
+    if (!this.native()) return;
+    const C = window.Capacitor, key = RC_KEY[C.getPlatform()]; if (!key) return;
+    this.rc = (C.Plugins && C.Plugins.Purchases) || (C.registerPlugin && C.registerPlugin('Purchases'));
+    try { await this.rc.configure({ apiKey: key }); this.ready = true; } catch (e) { logErr(`결제 초기화 실패: ${e && e.message}`); }
+  },
+  get test() { return !this.ready; },
+  // 결제가 끝나면 true (취소·실패는 false). 테스트 모드는 바로 true
+  async buy(key) {
+    if (this.test) return true;
+    if (this.busy) return false;
+    this.busy = true;
+    try {
+      const id = PRODUCT_ID[key]; const r = await this.rc.getProducts({ productIdentifiers: [id], type: 'NON_SUBSCRIPTION' });
+      const prod = r && r.products && r.products[0]; if (!prod) { toast('상품 정보를 받지 못했어요. 잠시 뒤 다시 시도해 주세요'); return false; }
+      await this.rc.purchaseStoreProduct({ product: prod });
+      return true;
+    } catch (e) {
+      const d = (e && e.data) || {}, code = String((e && e.code) ?? d.code ?? '');   // 플러그인 원래 오류: code '1' = 사용자가 취소
+      if (!(e && (e.userCancelled || d.userCancelled || code === '1'))) { toast('결제가 완료되지 않았어요'); logErr(`결제 실패 ${key}: ${(e && e.message) || code}`); }
+      return false;
+    } finally { this.busy = false; }
+  },
+  // 스토어에 남은 구매 기록 → 영구 상품 id 목록
+  async restore() {
+    if (this.test) return null;
+    const r = await this.rc.restorePurchases(); const tx = (r && r.customerInfo && r.customerInfo.nonSubscriptionTransactions) || [];
+    const ids = new Set(tx.map((t) => t.productIdentifier));
+    return STORE.filter((p) => ids.has(PRODUCT_ID[p.id])).map((p) => p.id);
+  },
+};
+const testNote = () => (Billing.test ? '<div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div>' : '');
 const storeVisible = (p) => (p.all ? !STORE.some((x) => !x.all && owns(x.id)) : true);
-// 실제 앱: 여기서 스토어 결제(구글 플레이 결제 / StoreKit)를 열고, 결제가 확인되면 grantOwned. 지금은 테스트 모드라 바로 지급
-function purchase(id) {
+// 스토어 결제가 끝나면 grantOwned (테스트 모드는 바로)
+async function purchase(id) {
   const p = STORE.find((x) => x.id === id); if (!p || owns(id)) return;
+  if (!(await Billing.buy(id))) return;
   grantOwned(id); SFX.play('level');
-  toast(`<b>${esc(p.name)}</b> 구매 완료 (테스트 · 실제 결제 없음)`, 3500);
+  toast(`<b>${esc(p.name)}</b> 구매 완료${Billing.test ? ' (테스트 · 실제 결제 없음)' : ''}`, 3500);
   if (id === 'starter' || p.all) claimStarter();
   refreshSheet(); save();
 }
@@ -1080,8 +1134,9 @@ function applyOwned() {
   for (const p of STORE) if (p.cos && owns(p.id)) for (const c of p.cos) if (!S.inv.some((x) => x.cos === c)) { const it = makeCos(c); S.inv.push(it); if (!S.equip[it.slot]) S.equip[it.slot] = it.uid; }
   statCache = null;
 }
-// 실제 앱: 스토어의 구매 내역을 받아 grantOwned. 테스트에서는 이 기기에 남은 기록을 다시 적용
-function restorePurchases() {
+// 구매 복원: 앱은 스토어 구매 기록을 받아 grantOwned, 테스트는 이 기기에 남은 기록을 다시 적용
+async function restorePurchases() {
+  if (!Billing.test) { try { const ids = await Billing.restore(); for (const id of ids || []) grantOwned(id); claimStarter(); } catch (e) { toast('구매 복원에 실패했어요. 잠시 뒤 다시 시도해 주세요'); logErr(`복원 실패: ${e && e.message}`); return; } }
   applyOwned(); const got = STORE.filter((p) => !p.all && owns(p.id)).map((p) => p.name);
   toast(got.length ? `구매 복원: ${got.map(esc).join(' · ')}` : '복원할 구매가 없습니다', 3500); refreshSheet(); save();
 }
@@ -1105,16 +1160,18 @@ const INJI_PACKS = [
   { id: 'p4', inji: 3900, bonus: 1100, price: 33000 },
 ];
 const MONTHLY = { price: 5500, now: 300, daily: 100, days: 30 };
-function buyInji(id) {
+async function buyInji(id) {
   const p = INJI_PACKS.find((x) => x.id === id); if (!p) return;
+  if (!(await Billing.buy(id))) return;
   const a = accLoad(); a.packs = a.packs || {}; const first = !a.packs[id];
   const got = (p.inji + p.bonus) * (first ? 2 : 1);   // 상품마다 첫 구매 2배 (계정에 한 번)
   a.packs[id] = (a.packs[id] || 0) + 1; accSave(a);
-  S.inji += got; SFX.play('coin'); toast(`인지 ${fmt(got)} 충전${first ? ' · 첫 구매 2배!' : ''} (테스트)`, 3500); refreshSheet(); save();
+  S.inji += got; SFX.play('coin'); toast(`인지 ${fmt(got)} 충전${first ? ' · 첫 구매 2배!' : ''}${Billing.test ? ' (테스트)' : ''}`, 3500); refreshSheet(); save();
 }
-function buyMonthly() {
+async function buyMonthly() {
+  if (!(await Billing.buy('monthly'))) return;
   const a = accLoad(); a.monthlyUntil = Math.max(now(), a.monthlyUntil || 0) + MONTHLY.days * 864e5; a.monthlyDay = new Date().toDateString(); accSave(a);
-  S.inji += MONTHLY.now; SFX.play('coin'); toast(`월간 사무지원 · 인지 ${MONTHLY.now} · ${MONTHLY.days}일간 매일 ${MONTHLY.daily} (테스트)`, 4000); refreshSheet(); save();
+  S.inji += MONTHLY.now; SFX.play('coin'); toast(`월간 사무지원 · 인지 ${MONTHLY.now} · ${MONTHLY.days}일간 매일 ${MONTHLY.daily}${Billing.test ? ' (테스트)' : ''}`, 4000); refreshSheet(); save();
 }
 // 월간 사무지원: 하루 한 번, 그날 처음 플레이하는 슬롯에 지급
 function monthlyTick() {
@@ -1128,14 +1185,14 @@ function injiCard() {
     <p class="note">뽑기 · 비급 · 이직 신청서 · AI 법률비서 · 경험치 부스터에 써요. 상품마다 <b>첫 구매는 2배</b>.</p>
     <div class="row between"><span><b>월간 사무지원</b> <span class="note" style="color:var(--exp)">가장 이득</span><br><span class="note">즉시 인지 ${MONTHLY.now} + ${MONTHLY.days}일간 매일 ${MONTHLY.daily} (총 ${fmt(MONTHLY.now + MONTHLY.daily * MONTHLY.days)})${left ? ` · <b style="color:var(--exp)">${left}일 남음</b>` : ''}</span></span><button class="btn sm red" data-act="monthly">${won(MONTHLY.price)}</button></div>
     ${INJI_PACKS.map((p) => `<div class="row between"><span><b>인지 ${fmt(p.inji)}</b>${p.bonus ? ` <span class="note">+${fmt(p.bonus)} 보너스</span>` : ''}${packs[p.id] ? '' : ' <span class="note" style="color:var(--stamp)">첫 구매 2배</span>'}</span><button class="btn sm" data-pack="${p.id}">${won(p.price)}</button></div>`).join('')}
-    <div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div></div>`;
+    ${testNote()}</div>`;
 }
 const toCharge = () => setTimeout(() => { const el = $('#inji-shop'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 60);
 function storeCard() {
   return `<div class="card"><div class="row between"><h3>영구 구매 · 패키지</h3><button class="btn ghost sm" data-act="restore">구매 복원</button></div>
     <p class="note">한 번 사면 영구. 모든 슬롯에 적용되고, 앱을 지웠다 깔거나 폰을 바꿔도 「구매 복원」으로 돌아옵니다. 인지는 아래 「인지 충전」에서.</p>
     ${STORE.filter(storeVisible).map((p) => `<div class="row between"><span><b>${esc(p.name)}</b>${p.id === 'starter' && !owns('starter') ? ' <span class="note" style="color:var(--stamp)">첫 결제 추천</span>' : ''}<br><span class="note">${esc(p.d)}</span></span>${owns(p.id) ? '<span class="note" style="color:var(--exp);flex:none">보유</span>' : `<button class="btn sm ${p.id === 'full' || p.all ? 'red' : ''}" data-own="${p.id}">${won(p.price)}</button>`}</div>`).join('')}
-    <div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div></div>`;
+    ${testNote()}</div>`;
 }
 function shopTab() {
   const lv = Math.min(10, 1 + Math.floor(S.eqPulls / 30)); const c = Math.max(0, ...Object.keys(S.cleared).map((k) => parseSid(k).c)) || 1;
@@ -1669,7 +1726,11 @@ function init() {
   $('#g-ok').addEventListener('click', closeGuide);
   const unlockAudio = () => { if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); }; window.addEventListener('pointerdown', unlockAudio); window.addEventListener('keydown', unlockAudio);
   window.addEventListener('resize', layout); window.addEventListener('orientationchange', () => setTimeout(layout, 200));
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  document.addEventListener('visibilitychange', () => {   // 홈으로 나가면 저장하고 소리를 멈춘다 (앱에서 백그라운드 재생 방지)
+    if (document.hidden) { save(); if (BGM.el) BGM.el.pause(); if (SFX.ctx && SFX.ctx.state === 'running') SFX.ctx.suspend(); }
+    else { if (BGM.el && BGM.on) BGM.el.play().catch(() => { }); if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); }
+  });
+  appHooks(); Billing.init();
   setInterval(() => { if (S.major) { save(); monthlyTick(); } }, 10000);
   layout();
   $('#b-hp').insertAdjacentHTML('afterbegin', `<span class="ic" style="${iconStyle('loot', LOOT.gimbap)};width:26px;height:26px;background-size:400% 300%;display:block"></span>`);
