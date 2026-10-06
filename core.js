@@ -601,10 +601,11 @@ function updatePlayer(dt) {
   if (p.onGround && p.plat && (pressed.down || (keys.down && pressed.jump))) { p.dropT = 0.28; p.onGround = false; p.vy = 60; p.plat = null; }
   // 점프: X·Space·점프 버튼 또는 ↑(밧줄 앞이 아닐 때)
   else if ((pressed.jump || pressed.up) && p.onGround && p.dashT <= 0) { p.vy = -JUMP_V; p.onGround = false; p.dj = 0; SFX.play('jump'); fxDust(p.x, p.y); }
-  // 공중 점프: 2차 전직부터 모두 2단 점프, 근거리는 3단(누른 쪽으로 도약). 높이는 조금씩만: 2단은 금고층(150)에 못 닿고, 근거리 3단은 겨우 닿는다
+  // 공중 점프: 2차 전직부터 모두 2단 점프, 근거리는 3단(방향키를 누르면 그쪽으로 도약, 안 누르면 곧장 위로). 2단은 금고층(150)에 못 닿고, 근거리 3단은 넉넉히 닿는다 (근거리의 특권)
   else if ((pressed.jump || pressed.up) && !p.onGround && (p.dj || 0) < airJumps() && p.dashT <= 0 && p.hurtT <= 0) {
     p.dj = (p.dj || 0) + 1;
-    if (job().type === 'melee') { const dir = ax || p.face; p.face = dir; p.vy = -270; p.flashT = 0.3; p.flashV = dir * 430; p.trailT = 0; }
+    if (job().type === 'melee' && ax) { p.face = ax; p.vy = -320; p.flashT = 0.3; p.flashV = ax * 430; p.trailT = 0; }   // 방향키를 누르고 있으면 그쪽으로 도약
+    else if (job().type === 'melee') { p.vy = -320; p.flashT = 0; }   // 안 누르면 곧장 위로
     else p.vy = Math.min(p.vy, -300);
     W.fx.push({ k: 'ring', x: p.x, y: p.y - 6, r: 22 + 6 * p.dj, t: 0, dur: 0.3, color: job().color }); SFX.play('jump'); fxDust(p.x, p.y);
   }
