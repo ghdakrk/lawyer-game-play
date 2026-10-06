@@ -169,7 +169,7 @@ function changeJob(id) {
   showBanner(`전직 · ${jobName(id)}`, `${RANGE[JOBS[id].type].name} · ${RANGE[JOBS[id].type].d}`);
   SFX.play('level'); BGM.jingle('job');
   if (W && player) { fxSparkle(player.x, player.y - 30, JOBS[id].color, 30); W.fx.push({ k: 'pillar', x: player.x, w: 60, color: JOBS[id].color, t: 0, dur: 0.9 }); }
-  learnTrivia(JOB_TRIVIA[id]); if (JOBS[id].tier >= 2) showGuide('g_lock'); if (JOBS[id].mech === 'evidence') later(1.5, () => showGuide('g_evidence')); if (JOBS[id].tier >= 2) later(3, () => showGuide('g_dj'));
+  learnTrivia(JOB_TRIVIA[id]); if (JOBS[id].tier >= 2) showGuide('g_lock'); if (JOBS[id].mech === 'evidence') later(1.5, () => showGuide('g_evidence')); if (JOBS[id].tier >= 2) { const aw = AWAKE[JOBS[id].basic.k]; later(2.4, () => { showBanner(`기본 공격 각성 · ${aw.name}`, `${aw.d} · ${JOBS[id].type === 'melee' ? '3단' : '2단'} 점프`); if (W && player) fxRing(player.x, player.y - 30, 70, JOBS[id].color); SFX.play('skill'); }); later(4.6, () => showGuide('g_dj')); }
   checkGuides(); updateBadges(); save();
 }
 // 패시브 해금 확인
@@ -775,9 +775,9 @@ function renderHud() {
     const lbl = $(`#l-${slot}`); const txt = sk && lv ? shortName(sk.name) : '＋';
     const html = txt.length === 4 ? `${txt.slice(0, 2)}<br>${txt.slice(2)}` : txt.length === 5 ? `${txt.slice(0, 3)}<br>${txt.slice(3)}` : txt;   // 4~5자는 두 줄
     if (lbl.innerHTML !== html) lbl.innerHTML = html;
-    const cd = p && sk && lv ? p.cds[slot] / (sk.cd * (1 - st.cdr)) : 0;
+    const cd = p && sk && lv ? p.cds[slot] / skCd(id, st) : 0;
     $(`#cd-${slot}`).style.transform = `scaleY(${clamp(cd, 0, 1)})`;
-    btn.classList.toggle('nomp', !!(p && sk && lv && p.mp < sk.mp));
+    btn.classList.toggle('nomp', !!(p && sk && lv && p.mp < skMp(id)));
     btn.classList.toggle('off', !!(sk && sk.job !== S.job));
     btn.style.setProperty('--c', sk ? JOBS[sk.job].color : '#666');
   }
@@ -948,9 +948,9 @@ function skillTab() {
     else if (lv < 10) { const c = skillUpCost(id); action = `<span class="note">SP ${c.sp} · ₩${fmt(c.gold)}</span><button class="btn sm" data-skup="${id}" ${S.sp >= c.sp && S.gold >= c.gold ? '' : 'disabled'}>Lv 올리기</button>`; }
     else action = '<span class="note">최대 레벨</span>';
     const est = Math.round(stats().atk * sk.mult * (1 + 0.12 * (Math.max(1, lv) - 1)) * stats().skill);
-    const cost = j.mech === 'card' ? `₩${fmt(goldCost(sk))}` : `커피 ${sk.mp}`;
+    const cost = j.mech === 'card' ? `₩${fmt(goldCost(id))}` : `커피 ${skMp(id)}`;
     return `<div class="skrow ${lv ? '' : 'locked'}"><div class="skic" style="--c:${j.color}">${i + 1}</div><div style="min-width:0"><b>${esc(sk.name)}</b> ${lv ? `<span class="lvtag">Lv.${lv}</span>` : '<span class="note">미습득</span>'} <span class="tag">${esc(sk.tag || '')}</span><br><span class="note">${esc(sk.d)}</span><br><span class="note"><b style="color:var(--fg)">공격력의 ${Math.round(sk.mult * (1 + 0.12 * (Math.max(1, lv) - 1)) * 100)}%</b> (약 ${fmt(est)}) · ${cost} · 재사용 ${sk.cd}초</span>
-      ${evo.length ? `<div class="evo"><span class="${lv >= 5 ? 'on' : ''}">Lv5 강화: ${esc(evo[0])}</span><span class="${lv >= 10 ? 'on' : ''}">Lv10 각성: ${esc(evo[1])}</span></div>` : ''}<div class="row wrap" style="margin-top:4px">${action}</div></div></div>`;
+      ${evo.length ? `<div class="evo"><span class="${lv >= 5 ? 'on' : ''}">Lv5 강화: ${esc(evo[0])}</span>${JOBS[sk.job].tier >= 2 ? `<span class="${lv >= 7 ? 'on' : ''}">Lv7 각성: ${esc(evo[1])}</span><span class="${lv >= 10 ? 'on' : ''}">Lv10 마스터: 재사용·커피 −20%</span>` : ''}</div>` : ''}<div class="row wrap" style="margin-top:4px">${action}</div></div></div>`;
   }).join('');
   const u = SKILLS[ultId()];
   return `<div class="card"><div class="row between"><h3>스킬 칸 (A·S·D${n > 3 ? '·C' : ''})</h3><span class="note">칸을 고르고 아래 스킬을 누르세요</span></div>
@@ -958,8 +958,9 @@ function skillTab() {
     ${pool || '<p>배운 스킬이 없습니다.</p>'}
     <p class="note">전직해도 배운 스킬은 사라지지 않아요(이직하면 떠나는 직업 스킬은 반납·환급). 다른 직업 스킬은 위력 90%. 2차 전직하면 C칸이 열립니다.</p></div>
   <div class="card"><div class="row between"><h3>${esc(jobName())}의 스킬 배우기</h3><b style="color:var(--hl)">SP ${S.sp}</b></div>
-    <p>비급: 초급 ${S.books.b1 || 0} · 중급 ${S.books.b2 || 0} · 고급 ${S.books.b3 || 0}. 스킬 레벨당 피해 +12%, Lv5·Lv10에서 모양이 바뀝니다.</p>
+    <p>비급: 초급 ${S.books.b1 || 0} · 중급 ${S.books.b2 || 0} · 고급 ${S.books.b3 || 0}. 스킬 레벨당 피해 +12%. Lv5 강화 · Lv7 각성(새 기능) · Lv10 마스터(재사용·커피 −20%).</p>
     ${rows}
+    ${j.tier >= 2 ? `<div class="skrow"><div class="skic" style="--c:${j.color}">Z</div><div><b>기본 공격 각성 · ${esc(AWAKE[j.basic.k].name)}</b> <span class="lvtag">2차</span><br><span class="note">${esc(AWAKE[j.basic.k].d)}</span></div></div>` : `<div class="skrow locked"><div class="skic">Z</div><div><b>기본 공격 각성</b> <span class="note">2차 전직하면</span><br><span class="note">근거리 십자 2연타 · 원거리 유도탄 2·3·5발 · 중거리 쌍파동</span></div></div>`}
     <div class="skrow"><div class="skic ult" style="--c:${j.color}">F</div><div><b>${esc(u.name)}</b> <span class="lvtag">${u.awak ? '각성 궁극기' : '궁극기'}</span> <span class="tag">${esc(u.tag || '')}</span><br><span class="note">${esc(u.d)} · 공격력의 ${Math.round(u.mult * 100)}% · 적을 때리면 게이지가 찹니다</span>${j.rank && !S.rank[S.job] ? `<br><span class="note">Lv.30 승진(3차 전직)하면 「${esc(SKILLS[j.rank.ult].name)}」으로 각성</span>` : ''}</div></div></div>`;
 }
 function resumeTab() {
@@ -1432,7 +1433,7 @@ function onSheetClick(ev) {
   if (d.job) { closeSheet(); changeJob(d.job); return; }
   if (d.acc) { const q = QMAP[d.acc]; closeSheet(); acceptQuest(q); return; }
   if (d.learn) { const sk = SKILLS[d.learn], L = sk.learn; if (S.lv < L.lv || !S.books[L.book] || S.gold < L.gold) return; S.books[L.book]--; S.gold -= L.gold; S.skl[d.learn] = 1; ensureLoadout(); SFX.play('level'); showBanner('스킬 습득', sk.name); updateBadges(); refreshSheet(); return; }
-  if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold || skillLv(d.skup) >= skillCap(d.skup)) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; if (S.skl[d.skup] === 5 || S.skl[d.skup] === 10) { showBanner(S.skl[d.skup] === 5 ? '스킬 강화!' : '스킬 각성!', `${SKILLS[d.skup].name} · ${(SKILL_EVO[d.skup] || [])[S.skl[d.skup] === 5 ? 0 : 1] || ''}`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
+  if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold || skillLv(d.skup) >= skillCap(d.skup)) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; { const L = S.skl[d.skup], ev = SKILL_EVO[d.skup] || [], nm = SKILLS[d.skup].name; if (L === 5) showBanner('스킬 강화!', `${nm} · ${ev[0] || ''}`); else if (L === 7) showBanner('스킬 각성!', `${nm} · 새 기능: ${ev[1] || ''}`); else if (L === 10) showBanner('스킬 마스터!', `${nm} · 재사용·커피 −20%`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
   if (d.party) { const id = d.party; if (S.party.includes(id)) S.party = S.party.filter((x) => x !== id); else if (S.party.length < S.slots) S.party.push(id); statCache = null; if (W && W.kind === 'stage') buildAllies(); refreshSheet(); return; }
   if (d.cup) { const lv = S.compLv[d.cup] || 1; const cost = Math.round(600 * Math.pow(lv, 1.8)); if (S.gold < cost) return; S.gold -= cost; S.compLv[d.cup] = lv + 1; statCache = null; SFX.play('level'); refreshSheet(); return; }
   if (d.daily) { const x = S.daily.list.find((y) => y.id === d.daily); if (x && !x.claimed && x.prog >= x.n) { x.claimed = true; S.gold += x.gold; S.inji += x.inji; SFX.play('quest'); toast(`오늘의 의뢰 보상 · ₩${fmt(x.gold)} · 인지 ${x.inji}`); } refreshSheet(); return; }
@@ -1676,7 +1677,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
+  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

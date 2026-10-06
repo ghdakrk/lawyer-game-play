@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.6.7-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.6.8-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -260,13 +260,14 @@ const humanSim = () => !!window.__humanSim;
 const autoMul = () => (S.auto && !humanSim() ? (aiOn() ? 1 : 0.8) : 1);
 const autoSkills = () => humanSim() || aiOn();
 // CEO는 스킬에 수임료를 쓴다
-const goldCost = (sk) => Math.round(sk.mp * (0.5 + S.lv * 0.12));
+const skMp = (id) => Math.round(SKILLS[id].mp * (skillLv(id) >= 10 ? 0.8 : 1));   // Lv10 마스터: 커피 −20%
+const goldCost = (id) => Math.round(skMp(id) * (0.5 + S.lv * 0.12));
 function canCast(id, quiet) {
   const sk = SKILLS[id], p = player;
-  if (job().mech === 'card') { if (S.gold >= goldCost(sk)) return true; if (!quiet) toast(`수임료가 부족합니다 · 필요 ₩${fmt(goldCost(sk))}`); return false; }
-  if (p.mp >= sk.mp) return true; if (!quiet) toast('커피가 부족합니다 · 적을 때리면 찹니다 (W: 믹스커피)'); return false;
+  if (job().mech === 'card') { if (S.gold >= goldCost(id)) return true; if (!quiet) toast(`수임료가 부족합니다 · 필요 ₩${fmt(goldCost(id))}`); return false; }
+  if (p.mp >= skMp(id)) return true; if (!quiet) toast('커피가 부족합니다 · 적을 때리면 찹니다 (W: 믹스커피)'); return false;
 }
-function payCast(id) { const sk = SKILLS[id]; if (job().mech === 'card') { const c = goldCost(sk); S.gold -= c; W.texts.push({ x: player.x, y: player.y - 70, s: `-₩${fmt(c)}`, c: '#ffd24d', t: 0 }); } else player.mp -= sk.mp; }
+function payCast(id) { const sk = SKILLS[id]; if (job().mech === 'card') { const c = goldCost(id); S.gold -= c; W.texts.push({ x: player.x, y: player.y - 70, s: `-₩${fmt(c)}`, c: '#ffd24d', t: 0 }); } else player.mp -= skMp(id); }
 // 지지율 배율 (정치 신인)
 const mechSkillMul = () => (job().mech === 'support' && player ? 1 + (player.support || 0) / 100 * 0.6 : 1);
 // 법률 상식 카드
@@ -480,17 +481,25 @@ function recLv(g) { const i = Math.max(0, Math.floor(g || 0)); return i < REC.le
 function mobLevel(m) { return recLv(W.g) + (W.tier ? TIERS[W.tier].lv : 0) + (S.ng || 0) * 6 + (m.elite ? 2 : 0) + (m.mid ? 4 : 0) + (m.boss ? 5 : 0); }
 
 // ---------- 스폰 ----------
+// 몬스터 강화 (v6.8): 2차 전직 뒤(3장~)는 점점 단단하게, 각 장 5단계(원흉 단계)와 김성호는 더 세게
+function foeMul(boss) {
+  if (!W || W.surv || W.kakha) return { hp: 1, dmg: 1 };
+  let hp = 1, dmg = 1;
+  if (W.c >= 3) { const k = Math.min(W.c, 5) - 3; hp *= [1.2, 1.3, 1.35][k]; dmg *= [1.05, 1.08, 1.1][k]; }   // 3장은 각성 효과를 느끼게 조금만, 갈수록 세게
+  if (W.s === 5) { hp *= boss ? 1.25 : 1.2; dmg *= boss ? 1.1 : 1; }
+  return { hp, dmg };
+}
 function spawnMob(id, x, o = {}) {
   const d = MOBS[id], df = diff(), g = W.g ?? 0;
   const elite = !!o.elite, mid = !!o.mid;
-  const hp = SCALE.hp(g) * d.hp * (elite ? 3 : 1) * (mid ? 16 : 1) * df.hp;
+  const fm = foeMul(false), hp = SCALE.hp(g) * d.hp * (elite ? 3 : 1) * (mid ? 16 : 1) * df.hp * fm.hp;
   const h = d.h * (elite ? 1.2 : 1) * (mid ? 1.7 : 1);
   const fly = d.ai === 'flyer';
   const pl = o.plat || null;
   const baseG = pl ? pl.y : GROUND;
   const fy = baseG - 30 - rand(0, 26) - (mid ? 20 : 0);
   const m = { id, d, x, y: fly ? fy : (o.drop ? baseG - 90 : baseG), vx: 0, vy: 0, hp, max: hp, h, w: h * 0.72, face: -1, state: 'move', t: rand(0, 2), cd: rand(0.6, 1.6), stun: 0, flash: 0, atkA: 0,
-    elite, mid, boss: false, onGround: !fly && !o.drop, dmg: SCALE.dmg(g) * d.dmg * (elite ? 1.3 : 1) * (mid ? 1.5 : 1) * df.dmg, baseY: fy, slow: 0, tag: 0, summonT: 6, plat: pl, patrol: rand(0, 1) < 0.5 ? -1 : 1 };
+    elite, mid, boss: false, onGround: !fly && !o.drop, dmg: SCALE.dmg(g) * d.dmg * (elite ? 1.3 : 1) * (mid ? 1.5 : 1) * df.dmg * fm.dmg, baseY: fy, slow: 0, tag: 0, summonT: 6, plat: pl, patrol: rand(0, 1) < 0.5 ? -1 : 1 };
   W.mobs.push(m);
   S.seen[id] = true;
   if (Math.random() < (elite ? 0.6 : 0.22)) mobBark(m);
@@ -499,9 +508,9 @@ function spawnMob(id, x, o = {}) {
 }
 function spawnBoss() {
   const ch = W.ch, d = BOSSES[ch.boss], df = diff();
-  const hp = SCALE.hp(W.g) * d.hp * df.hp * (ch.boss === 'kim' ? 1 + 0.1 * W.rumorSet.length : 1);
+  const fm = foeMul(true), hp = SCALE.hp(W.g) * d.hp * df.hp * fm.hp * (ch.boss === 'kim' ? 1 + 0.1 * W.rumorSet.length : 1);
   const b = { id: ch.boss, d, boss: true, x: W.arena + VW - 110, y: ch.boss === 'clock' ? GROUND - 26 : GROUND, vx: 0, vy: 0, hp, max: hp, h: d.h, w: d.h * 0.6, face: -1, state: 'idle', t: 0, cd: 2, stun: 0, flash: 0,
-    onGround: ch.boss !== 'clock', dmg: SCALE.dmg(W.g) * d.dmg * df.dmg, pat: 0, stacks: 0, timers: {}, phase: 1, atkA: 0, slow: 0, tag: 0, plat: null };
+    onGround: ch.boss !== 'clock', dmg: SCALE.dmg(W.g) * d.dmg * df.dmg * fm.dmg, pat: 0, stacks: 0, timers: {}, phase: 1, atkA: 0, slow: 0, tag: 0, plat: null };
   W.mobs.push(b); W.boss = b; S.seen['boss_' + ch.boss] = true;
   if (ch.boss === 'doppel') b.real = true;
   $('#bossbar').hidden = false; $('#boss-name').textContent = `Lv.${mobLevel(b)} ${d.name}`; $('#boss-phase').textContent = W.tier === 2 ? '상고심 · 대법원' : W.hard ? '항소심' : '';

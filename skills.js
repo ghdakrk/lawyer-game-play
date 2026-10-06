@@ -17,7 +17,7 @@ function meleeBox(face, r, h, dmg, o = {}) {
   let n = 0; const mech = job().mech;
   if (scene === 'stage') for (const m of W.mobs) {
     if (m.dead || !hitBox(m, x0, y0, r + 8, h)) continue;
-    damageMob(m, dmg, { kb: o.kb ?? 90, src: p.x, heavy: o.heavy, up: o.up, stun: o.stun, color: o.color, basic: o.basic && n < 3 ? 'melee' : null });
+    damageMob(m, dmg, { kb: o.kb ?? 90, src: p.x, heavy: o.heavy, up: o.up, stun: o.stun, color: o.color, basic: o.basic && n < 3 ? 'melee' : null, ultMul: o.ultMul });
     if (o.basic && !m.dead && !m.boss && !m.mid && !m.fake && (mech === 'evidence' || mech === 'card') && m.hp < m.max * (mech === 'card' ? 0.15 : 0.18)) execute(m, mech);
     n++;
   }
@@ -25,27 +25,42 @@ function meleeBox(face, r, h, dmg, o = {}) {
   for (const pr of W.props) { if (pr.dead || Math.abs(pr.y - p.y) > 50) continue; if (pr.x > x0 - 14 && pr.x < x0 + r + 22) hitProp(pr); }
   return n;
 }
+// 2차 전직부터 기본 공격 각성: 근거리 십자 2연타 · 원거리 2-3-5발 유도탄 · 중거리 쌍파동 · 사슬 2연타
+const basicAwake = () => job().tier >= 2;
+function crossHit(face, r, dmg, col, big) {   // 근거리·사슬 각성: 첫 타 직후 반대 대각선으로 한 번 더 (따닥)
+  const p = player;
+  later(0.07, () => {
+    if (!W || !player || p.dead || scene !== 'stage') return;
+    W.fx.push({ k: 'cross', x: p.x + face * r * 0.55, y: p.y - 36, r: big ? 30 : 22, color: col, t: 0, dur: 0.26, w: big ? 9 : 6 });
+    meleeBox(face, r, 66, dmg, { kb: big ? 120 : 40, color: col, ultMul: 0.5 });
+    SFX.play('swing');
+  });
+}
 function basicHit() {
   const p = player, j = job(), b = j.basic, st = stats();
   const c = p.combo, mult = [0, 1, 1.1, 1.6][c] * (buff('cram') ? 1.3 : 1);
-  const dmg = st.atk * mult, col = j.color, big = c === 3;
+  const dmg = st.atk * mult, col = j.color, big = c === 3, aw = basicAwake();
   if (b.k === 'melee') {
     const r = b.range * (big ? 1.25 : 1);
     W.fx.push({ k: 'slash', x: p.x + p.face * 10, y: p.y - 34, r, face: p.face, color: col, t: 0, dur: 0.2, combo: c, w: big ? 14 : 9 });
     if (meleeBox(p.face, r, 66, dmg, { kb: big ? 230 : 90, heavy: big, up: big ? 220 : 0, basic: true }) && big) { cam.shake = 5; fxRing(p.x + p.face * r * 0.6, p.y - 10, 40, col); }
+    if (aw) crossHit(p.face, r, dmg * 0.6, col, big);
   } else if (b.k === 'wave') {
     W.fx.push({ k: 'slash', x: p.x + p.face * 10, y: p.y - 34, r: b.melee, face: p.face, color: col, t: 0, dur: 0.16, combo: c, w: 7 });
     meleeBox(p.face, b.melee, 60, dmg, { kb: 80, basic: true });
-    const sp = big ? 430 : 380;
-    W.pprj.push({ k: b.proj, x: p.x + p.face * 22, y: p.y - 34, vx: p.face * sp, vy: 0, r: big ? 14 : 9, dmg: dmg * 0.5, pierce: big ? 3 : 0, hit: new Set(), life: (b.dist * (big ? 1.3 : 1)) / sp, rot: 0, face: p.face, color: col, sc: big ? 1.45 : 1, tr: [], basic: 'proj' });
+    const sp = big ? 430 : 380, n = aw ? 2 : 1;
+    for (let i = 0; i < n; i++) { const a = n > 1 ? (i ? 0.07 : -0.07) : 0;
+      W.pprj.push({ k: b.proj, x: p.x + p.face * 22, y: p.y - 34 + (n > 1 ? (i ? 7 : -7) : 0), vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 14 : 9, dmg: dmg * (aw ? 0.4 : 0.5), pierce: big ? 3 : 0, hit: new Set(), life: (b.dist * (big ? 1.3 : 1)) / sp, rot: 0, face: p.face, color: col, sc: big ? 1.45 : 1, tr: [], basic: 'proj', seek: aw ? 2 : 0, ultMul: aw ? 0.6 : 1 }); }
   } else if (b.k === 'shot') {
-    const sp = 460; const n = big ? 3 : 1; const aim = aimAngle(p, b.dist);
-    for (let i = 0; i < n; i++) { const a = aim + (i - (n - 1) / 2) * 0.12; W.pprj.push({ k: b.proj, x: p.x + p.face * 24, y: p.y - 40, vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 11 : 9, dmg: dmg * (big ? 0.8 : 1), pierce: b.pierce || 0, hit: new Set(), life: b.dist / sp, face: p.face, color: col, sc: big ? 1.3 : 1, tr: [], basic: 'melee' }); }
-    fxSparkle(p.x + p.face * 26, p.y - 40, col, 5);
+    const sp = 460; const n = aw ? [0, 2, 3, 5][c] : big ? 3 : 1; const aim = aimAngle(p, b.dist);
+    const per = aw ? [0, 0.7, 0.6, 0.5][c] : big ? 0.8 : 1, spread = aw ? 0.09 : 0.12;
+    for (let i = 0; i < n; i++) { const a = aim + (i - (n - 1) / 2) * spread; W.pprj.push({ k: b.proj, x: p.x + p.face * 24, y: p.y - 40, vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 11 : 9, dmg: dmg * per, pierce: b.pierce || 0, hit: new Set(), life: b.dist * (aw ? 1.15 : 1) / sp, face: p.face, color: col, sc: big ? 1.3 : 1, tr: [], basic: aw ? 'proj' : 'melee', seek: aw ? 3.2 : 0, ultMul: aw ? 0.5 : 1 }); }
+    fxSparkle(p.x + p.face * 26, p.y - 40, col, aw ? 8 : 5);
   } else if (b.k === 'lash') {
     const r = b.range * (big ? 1.2 : 1);
     W.fx.push({ k: 'lash', x: p.x + p.face * 8, y: p.y - 38, r, face: p.face, t: 0, dur: 0.24, color: '#d9e2ff', big });
     meleeBox(p.face, r, 36, dmg, { kb: big ? 200 : 110, yOff: 22, heavy: big, basic: true });
+    if (aw) crossHit(p.face, r, dmg * 0.55, '#d9e2ff', big);
     if (big) SFX.play('chain');
   }
 }
@@ -96,7 +111,9 @@ function indict() {
 // ======================================================================
 function rumorPenalty(id) { return W && W.rumorSet && W.rumorSet.includes(4) && player.lastSkill === id ? 0.6 : 1; }
 function skillMul(id) { const lv = Math.max(1, skillLv(id)); return SKILLS[id].mult * (1 + 0.12 * (lv - 1)) * stats().skill * (SKILLS[id].job === S.job ? 1 : 0.9); }
-const evoOf = (id) => (skillLv(id) >= 10 ? 2 : skillLv(id) >= 5 ? 1 : 0);
+const skCd = (id, st) => SKILLS[id].cd * (1 - st.cdr) * (1 - 0.015 * (skillLv(id) - 1)) * (skillLv(id) >= 10 ? 0.8 : 1);
+// 스킬 진화: Lv5 강화 · Lv7 각성(새 기능) · Lv10 마스터(재사용·커피 −20%)
+const evoOf = (id) => (skillLv(id) >= 7 ? 2 : skillLv(id) >= 5 ? 1 : 0);
 let lastDeny = 0;
 function castSkill(i) {
   const p = player; const id = S.loadout[i]; const sk = SKILLS[id]; const slot = 's' + (i + 1);
@@ -105,13 +122,13 @@ function castSkill(i) {
   if (p.cds[slot] > 0 || p.dashT > 0 || p.climb) return;
   const st = stats();
   if (!canCast(id, performance.now() - lastDeny < 1200)) { if (performance.now() - lastDeny > 1200) { lastDeny = performance.now(); SFX.play('deny'); } return; }
-  payCast(id); p.cds[slot] = sk.cd * (1 - st.cdr) * (1 - 0.015 * (skillLv(id) - 1));
+  payCast(id); p.cds[slot] = skCd(id, st);
   p.castT = 0.32; p.atkT = 0;
   const dmg = st.atk * skillMul(id) * rumorPenalty(id) * mechSkillMul();
   const evo = evoOf(id);
   p.lastSkill = id;
   const col = JOBS[sk.job].color;
-  W.fx.push({ k: 'callout', s: sk.name + (evo === 2 ? ' ★' : evo === 1 ? ' +' : ''), x: p.x, y: p.y - 78, t: 0, dur: 0.9, color: col });
+  W.fx.push({ k: 'callout', s: sk.name + (skillLv(id) >= 10 ? ' ★★' : evo === 2 ? ' ★' : evo === 1 ? ' +' : ''), x: p.x, y: p.y - 78, t: 0, dur: 0.9, color: col });
   if (evo) { fxRing(p.x, p.y - 30, 40 + evo * 16, col); if (evo === 2) fxSparkle(p.x, p.y - 34, col, 12); }
   SFX.play('skill');
   SK[id](p, dmg, st, evo);
@@ -489,6 +506,10 @@ function updateProjectiles(dt) {
     } else if (s.k === 'gorb') {
       s.vx *= 1.004;
     }
+    if (s.seek && scene === 'stage') {   // 유도: 앞쪽 가까운 적에게 살짝 휜다
+      if (!s.tgt || s.tgt.dead) s.tgt = W.mobs.find((m) => !m.dead && !m.fake && (m.x - s.x) * Math.sign(s.vx || 1) > 0 && Math.abs(m.x - s.x) < 260 && Math.abs((m.y - m.h / 2) - s.y) < 160) || null;
+      const t = s.tgt; if (t) { const sp = Math.hypot(s.vx, s.vy), a = Math.atan2((t.y - t.h / 2) - s.y, t.x - s.x); s.vx += (Math.cos(a) * sp - s.vx) * Math.min(1, dt * s.seek); s.vy += (Math.sin(a) * sp - s.vy) * Math.min(1, dt * s.seek); }
+    }
     if (s.g) s.vy += s.g * dt;
     s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.rot = (s.rot || 0) + (s.vr || 0) * dt;
     if (s.ground && s.gy != null) s.y = s.gy - 8;
@@ -516,7 +537,7 @@ function updateProjectiles(dt) {
       if (s.multi) m._mh[s.id] = W.t + s.multi; else s.hit.add(m);
       if (s.stick) { s.stuck = m; s.fuse = 1.0; s.ox = s.x - m.x; damageMob(m, s.dmg * 0.3, { color: '#ff4b3a' }); m.tag = 1.0; break; }
       if (s.k === 'hook') { s.hooked.push(m); damageMob(m, s.dmg, { color: '#d9e2ff' }); continue; }
-      damageMob(m, s.dmg, { kb: s.kb ?? (s.ally ? 40 : 70), up: s.up, stun: s.stun, src: s.x - s.vx, ally: s.ally, color: s.color, quiet: s.quiet, basic: s.basic });
+      damageMob(m, s.dmg, { kb: s.kb ?? (s.ally ? 40 : 70), up: s.up, stun: s.stun, src: s.x - s.vx, ally: s.ally, color: s.color, quiet: s.quiet, basic: s.basic, ultMul: s.ultMul });
       if (--s.pierce < 0) { s.life = 0; break; }
     }
     // 금고
@@ -720,6 +741,17 @@ function drawFx(f) {
       ctx.globalAlpha = 1 - k; ctx.strokeStyle = f.color; ctx.lineWidth = f.w; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.arc(0, 0, f.r * 0.78, a0, a, a < a0); ctx.stroke();
       ctx.lineWidth = f.w * 0.35; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      ctx.restore(); noGlow(); break;
+    }
+    case 'cross': {   // 십자 베기: 두 대각선이 따닥
+      ctx.save(); ctx.translate(f.x, f.y); ctx.globalCompositeOperation = 'lighter'; glow(f.color, 14); ctx.lineCap = 'round';
+      for (let i = 0; i < 2; i++) {
+        const kk = (f.t - i * 0.05) / (f.dur - 0.05); if (kk <= 0) continue;
+        const pr = Math.min(1, kk * 3.2), d = i ? -1 : 1, s0 = f.r;
+        ctx.globalAlpha = Math.max(0, 1 - kk);
+        ctx.beginPath(); ctx.moveTo(-s0 * d, -s0); ctx.lineTo(-s0 * d + 2 * s0 * d * pr, -s0 + 2 * s0 * pr);
+        ctx.strokeStyle = f.color; ctx.lineWidth = f.w; ctx.stroke(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = f.w * 0.35; ctx.stroke();
+      }
       ctx.restore(); noGlow(); break;
     }
     case 'lash': {
