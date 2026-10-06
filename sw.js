@@ -12,6 +12,7 @@ const put = (req, res) => { if (res && (res.ok || res.type === 'opaque')) { cons
 self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (/\.apk$/.test(url.pathname)) return;   // 앱 설치 파일은 캐시하지 않는다 (늘 최신)
   const code = req.mode === 'navigate' || /\.(js|html|webmanifest)$/.test(url.pathname);
   if (code) {   // 코드는 새로 받고, 끊겼으면 캐시
     e.respondWith(fetch(req).then((r) => put(req, r)).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))));
