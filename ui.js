@@ -109,8 +109,8 @@ function giveRewards(r) {
   if (r.cons) for (const [c, n] of Object.entries(r.cons)) { S.cons[c] = (S.cons[c] || 0) + n; out.push(`${CONSUMABLES[c].name} ×${n}`); }
   if (r.skill) { S.skl[r.skill] = Math.max(1, S.skl[r.skill] || 0); ensureLoadout(); out.push(`스킬 「${SKILLS[r.skill].name}」`); showBanner('새 스킬', SKILLS[r.skill].name); }
   if (r.job) { addJob(r.job); changeJob(r.job); }
-  if (r.unlock) { addJob(r.unlock); out.push(`직업: ${JOBS[r.unlock].name}`); if (job().tier < JOBS[r.unlock].tier) changeJob(r.unlock); else checkPassives(); if (JOBS[r.unlock].tier === 2) for (const id of ['j2a', 'j2b', 'j2c']) if (qState(id) === 'active') delete S.q[id]; }
-  if (r.rank) { S.rank[r.rank] = 1; checkPassives();
+  if (r.unlock) { addJob(r.unlock); S.sp += 3; out.push(`직업: ${JOBS[r.unlock].name} · SP +3`); if (job().tier < JOBS[r.unlock].tier) changeJob(r.unlock); else checkPassives(); if (JOBS[r.unlock].tier === 2) for (const id of ['j2a', 'j2b', 'j2c']) if (qState(id) === 'active') delete S.q[id]; }
+  if (r.rank) { S.rank[r.rank] = 1; S.sp += 5; out.push('SP +5'); checkPassives();
     if (S.job !== r.rank && JOBS[S.job].tier > JOBS[r.rank].tier) { statCache = null; toast(`${esc(jobName(r.rank))} 경력 인정 · 승진 패시브는 이력서에 꽂을 수 있어요`, 4000); }   // 히든 직업이 된 뒤 끝낸 승진: 직업은 그대로 (내려가지 않는다)
     else if (S.job !== r.rank) changeJob(r.rank); else { statCache = null; showBanner(`3차 전직 · ${jobName()}`, `각성 궁극기 「${SKILLS[ultId()].name}」`); BGM.jingle('job'); } out.push(`승진: ${jobName(r.rank)}`); }
   if (r.comp) { if (!S.comps.includes(r.comp)) S.comps.push(r.comp); if (S.party.length < S.slots && !S.party.includes(r.comp)) S.party.push(r.comp); out.push(`동료 ${COMPANIONS[r.comp].name}`); if (W && W.kind === 'stage') buildAllies(); }
@@ -132,15 +132,27 @@ function fixJobQuests() {
 }
 const upCostAt = (id, lv) => Math.round(120 * Math.pow(lv, 1.7) * (1 + JOBS[SKILLS[id].job].tier));
 // 이직: 떠나는 2차·3차 직업의 스킬은 반납하고, 모든 스킬 레벨을 1로 되돌려 SP·수임료·비급을 돌려준다. 패시브(이력서)는 그대로
-function transferJob(id) {
+// 스킬 초기화: keep(sid)면 Lv.1로 남기고, 아니면 반납(비급·배운 값 환급). 올린 레벨만큼 SP·수임료를 돌려준다
+function refundSkills(keep) {
   let sp = 0, gold = 0;
   for (const [sid, lv] of Object.entries(S.skl)) {
     const sk = SKILLS[sid]; if (!sk || sk.ult || !lv) continue;
     for (let l = 1; l < lv; l++) { sp++; gold += upCostAt(sid, l); }
-    if (JOBS[sk.job].tier < 2 || sk.job === id) S.skl[sid] = 1;
+    if (keep(sid)) S.skl[sid] = 1;
     else { delete S.skl[sid]; if (typeof sk.learn === 'object') { S.books[sk.learn.book] = (S.books[sk.learn.book] || 0) + 1; gold += sk.learn.gold; } }
   }
-  S.sp += sp; S.gold += gold;
+  S.sp += sp; S.gold += gold; statCache = null;
+  return { sp, gold };
+}
+// 스킬 최대 레벨: 대학생·로스쿨생 스킬은 Lv.5까지, 2차 스킬은 3차 승진(또는 그 직업의 히든 직업)이 되어야 Lv.6~10, 히든 스킬은 Lv.10
+function skillCap(id) {
+  const sj = SKILLS[id].job, t = JOBS[sj].tier;
+  if (t >= 3) return 10;
+  if (t === 2) return S.rank[sj] || S.jobs.includes(HIDDEN_OF[sj]) ? 10 : 5;
+  return 5;
+}
+function transferJob(id) {
+  const { sp, gold } = refundSkills((sid) => JOBS[SKILLS[sid].job].tier < 2 || SKILLS[sid].job === id);
   addJob(id); changeJob(id);
   const ranked = fixJobQuests();
   if (ranked) showBanner(`이직 · ${jobName(id)}`, '3차 경력을 인정받아 승진 상태로 시작합니다');
@@ -162,15 +174,17 @@ function changeJob(id) {
 }
 // 패시브 해금 확인
 function checkPassives() {
+  const fresh = [];
   for (const [id, p] of Object.entries(PASSIVES)) {
     if (S.passives.includes(id) || !S.jobs.includes(p.job)) continue;
     const u = p.unlock;
     const ok = u === 'job' || (u === 'rank' && S.rank[p.job]) || (typeof u === 'object' && skillLv(u.skill) >= u.lv);
-    if (ok) { S.passives.push(id); if (S.lv > 1) toast(`패시브 습득: <b>${esc(p.name)}</b> (${esc(p.d)})${p.job !== S.job ? ' · 이력서에 꽂을 수 있어요' : ''}`, 4000); }
+    if (ok) { S.passives.push(id); fresh.push(id); if (S.lv > 1) toast(`패시브 습득: <b>${esc(p.name)}</b> (${esc(p.d)})${p.job !== S.job ? ' · 이력서에 꽂을 수 있어요' : ''}`, 4000); }
   }
-  // 이력서 자동 채우기: 빈 칸이 있으면 다른 직업 패시브를 꽂는다
+  // 이력서 자동 채우기는 새로 배운 패시브·새로 열린 칸에만 (직접 뺀 패시브를 다시 꽂지 않는다)
   S.resume = S.resume.filter((id) => PASSIVES[id] && S.passives.includes(id) && PASSIVES[id].job !== S.job);
-  for (const id of S.passives) { if (S.resume.length >= resumeSlots()) break; if (PASSIVES[id].job !== S.job && !S.resume.includes(id)) S.resume.push(id); }
+  const n = resumeSlots(), grew = n > (S.resumeN || 0); S.resumeN = n;
+  for (const id of grew ? S.passives : fresh) { if (S.resume.length >= n) break; if (PASSIVES[id].job !== S.job && !S.resume.includes(id)) S.resume.push(id); }
   statCache = null;
 }
 // 스킬 칸 정리: 배운 스킬만, 현재 직업 스킬 우선
@@ -635,6 +649,13 @@ function drawBark(m) {
   ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillRect(x, y, w, hgt); ctx.beginPath(); ctx.moveTo(m.x - 4, y + hgt); ctx.lineTo(m.x + 4, y + hgt); ctx.lineTo(m.x, y + hgt + 6); ctx.fill();
   ctx.fillStyle = '#1d2340'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; b.lines.forEach((l, i) => ctx.fillText(l, x + 7, y + 10 + i * 14)); ctx.restore();
 }
+// 김성호의 뿔 그림자 (소문 6개 이상, 마지막 페이즈)
+function drawHorns(m) {
+  const t = m.t, hx = m.x + m.face * m.h * 0.04, hy = m.y - m.h * 0.98 + Math.sin(t * 3) * 1.5, s = m.h / 104;
+  ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(t * 5) * 0.15; ctx.fillStyle = '#7a0d12';
+  for (const dir of [-1, 1]) { ctx.beginPath(); ctx.moveTo(hx + dir * 9 * s, hy + 6 * s); ctx.quadraticCurveTo(hx + dir * 22 * s, hy - 4 * s, hx + dir * 17 * s, hy - 22 * s); ctx.quadraticCurveTo(hx + dir * 13 * s, hy - 6 * s, hx + dir * 3 * s, hy + 4 * s); ctx.fill(); }
+  ctx.restore();
+}
 function drawMob(m) {
   if (m.bark) drawBark(m);
   drawShadow(m.x, m.y, m.w);
@@ -649,7 +670,13 @@ function drawMob(m) {
   const alpha = m.fake ? 0.82 : 1;
   const glow = m.mid ? '#ff8a5c' : m.elite ? '#ffb84d' : m.boss && (m.shield || (m.id === 'orc' && W.mobs.filter((x) => !x.dead && x.member).length >= 3)) ? '#ffe45c' : m.real && m.boss && m.id === 'doppel' ? '#c48cff' : null;
   const flash = m.flash > 0 ? (m.boss || m.mid ? 0.45 : 0.7) : 0;
-  if (isBossAnim) drawAnim('atlas_boss', bid, fi, m.x + ox, m.y + oy, m.h, { flip: m.face < 0, sx, sy, rot, alpha, glow, flash });
+  if (isBossAnim && bid === 'kakha') {   // 한 장짜리 그림을 둥둥 띄우고, 공격할 때 부풀린다
+    const pulse = 1 + (m.atkA > 0 ? 0.06 : 0) + Math.sin(m.t * 2.2) * 0.015;
+    drawAnim('boss_kakha', 'kakha', 0, m.x + ox, m.y + oy - 6 + Math.sin(m.t * 1.8) * 4, m.h, { flip: m.face > 0, sx: sx * pulse, sy: sy * pulse, rot: rot + Math.sin(m.t * 1.3) * 0.03, alpha, glow: glow || '#ff3b3b', flash });
+  } else if (isBossAnim) {
+    if (m.boss && m.horns) drawHorns(m);
+    drawAnim('atlas_boss', bid, fi, m.x + ox, m.y + oy, m.h, { flip: m.face < 0, sx, sy, rot, alpha, glow: glow || (m.horns ? '#ff3b3b' : null), flash });
+  }
   else drawAnim('atlas_mobs', m.id, fi, m.x + ox, m.y + oy, m.h, { flip: m.face < 0, sx, sy, rot, alpha, glow, flash });
   if (m.tag > 0) { m.tag = Math.max(0, m.tag - 1 / 60); }
   if (m.stun > 0.25 && !m.boss) drawText('✶ ✶', m.x, m.y - m.h - 6, 9, '#ffe45c');
@@ -766,7 +793,7 @@ function badgeState() {
   const b = {};
   b.stat = S.pts > 0;
   b.skill = job().skills.some((id) => { const sk = SKILLS[id], L = sk.learn; return !skillLv(id) && typeof L === 'object' && S.lv >= L.lv && S.books[L.book] > 0 && S.gold >= L.gold; })
-    || (S.sp > (S.spSeen || 0) && S.loadout.some((id) => id && skillLv(id) < 10 && S.gold >= skillUpCost(id).gold))   // 새로 생긴 SP만 알린다 (스킬 탭을 한 번 보면 꺼짐)
+    || (S.sp > (S.spSeen || 0) && job().skills.some((id) => skillLv(id) && skillLv(id) < skillCap(id) && S.gold >= skillUpCost(id).gold))   // 새로 생긴 SP만 알린다 (스킬 탭을 한 번 보면 꺼짐)
     || S.loadout.slice(0, skillSlots()).some((x) => !x) && Object.keys(S.skl).some((id) => SKILLS[id] && !SKILLS[id].ult && skillLv(id) && !S.loadout.includes(id));
   b.resume = S.resume.length < resumeSlots() && S.passives.some((id) => PASSIVES[id].job !== S.job && !S.resume.includes(id));
   b.quest = QUESTS.some(questReady);
@@ -916,7 +943,8 @@ function skillTab() {
       if (L === 'quest') action = '<span class="note">퀘스트 「서류폭풍」 보상으로 배움</span>';
       else if (L === 'job') action = '<span class="note">전직하면 배움</span>';
       else { const ok = S.lv >= L.lv && S.books[L.book] > 0 && S.gold >= L.gold; action = `<span class="note">Lv.${L.lv} · ${BOOKS[L.book].name} (${S.books[L.book] || 0}) · ₩${fmt(L.gold)}</span><button class="btn sm" data-learn="${id}" ${ok ? '' : 'disabled'}>배우기</button>`; }
-    } else if (lv < 10) { const c = skillUpCost(id); action = `<span class="note">SP ${c.sp} · ₩${fmt(c.gold)}</span><button class="btn sm" data-skup="${id}" ${S.sp >= c.sp && S.gold >= c.gold ? '' : 'disabled'}>Lv 올리기</button>`; }
+    } else if (lv >= skillCap(id) && lv < 10) action = `<span class="note">최대 Lv.${skillCap(id)} · ${JOBS[sk.job].tier === 2 ? '3차 승진(또는 히든 직업)하면 Lv.10까지 열려요' : '이 직업 스킬은 Lv.5까지'}</span>`;
+    else if (lv < 10) { const c = skillUpCost(id); action = `<span class="note">SP ${c.sp} · ₩${fmt(c.gold)}</span><button class="btn sm" data-skup="${id}" ${S.sp >= c.sp && S.gold >= c.gold ? '' : 'disabled'}>Lv 올리기</button>`; }
     else action = '<span class="note">최대 레벨</span>';
     const est = Math.round(stats().atk * sk.mult * (1 + 0.12 * (Math.max(1, lv) - 1)) * stats().skill);
     const cost = j.mech === 'card' ? `₩${fmt(goldCost(sk))}` : `커피 ${sk.mp}`;
@@ -1124,6 +1152,7 @@ function shopTab() {
     <div class="row between"><span><b>경험치 부스터</b><br><span class="note">30분간 경험치 2배 · 보유 ${S.boosters}</span></span><button class="btn sm" data-act="buyboost" ${S.inji >= 150 ? '' : 'disabled'}>인지 150</button></div>
     <div class="row between"><span><b>비급 · 중급</b><br><span class="note">스킬 배우기 재료</span></span><button class="btn sm" data-bbook="b2" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>
     <div class="row between"><span><b>비급 · 고급</b><br><span class="note">마지막 스킬 재료</span></span><button class="btn sm" data-bbook="b3" ${S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
+    <div class="row between"><span><b>스킬 초기화</b><br><span class="note">모든 스킬을 Lv.1로 · 쓴 SP·수임료 전부 환급 (배운 스킬은 그대로)</span></span><button class="btn sm ${skArm ? 'red' : ''}" data-act="skreset" ${S.inji >= 200 ? '' : 'disabled'}>${skArm ? '정말 초기화?' : '인지 200'}</button></div>
     <div class="row between"><span><b>이직 신청서</b><br><span class="note">고정된 2차 직업을 다른 직업으로 · 이력서 칸 +1 · 스킬 초기화(SP·수임료 환급) · 승진 경력 유지</span></span><button class="btn sm" data-act="jobticket" ${S.jobs.some((j) => JOBS[j].tier >= 2) && S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
     ${owns('ai') ? '' : `<div class="row between"><span><b>AI 법률비서 (7일)</b><br><span class="note">AUTO 공격력 80% → 100%, 스킬·궁극기 자동 사용${aiOn() ? ` · <b style="color:var(--exp)">${Math.ceil((S.aiUntil - now()) / 864e5)}일 남음</b>` : ''}</span></span><button class="btn sm" data-act="buyai" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>`}</div>
   ${fullGame() ? storeCard() : ''}`;
@@ -1253,8 +1282,45 @@ async function importMigration(code) {
 }
 const inAppNote = () => (isKakao() ? '<div class="inapp-note">카카오톡 안에서 열려 있어요. 화면이 좁고 「홈 화면에 추가」가 안 되며, 저장도 크롬·사파리와 따로예요.<br><button class="btn sm" id="t-ext">크롬·사파리로 열기 (세이브도 같이)</button></div>'
   : inApp() ? '<div class="inapp-note">앱 안 브라우저에서 열려 있어요. 오른쪽 위 메뉴(⋮)에서 「다른 브라우저로 열기」를 눌러 주세요. 세이브는 설정 → 「세이브 파일 저장」으로 옮길 수 있어요.</div>' : '');
+// 특별 사건 · 미결마왕 각하: 김성호(5-5)를 넘으면 사건 게시판 5장에 열린다. 1심 → 항소심 → 상고심 차례로
+function kakhaCard() {
+  const open = !!S.cleared['5-5'], won = S.kakha || {};
+  if (!open) return '<div class="card locked"><h3>특별 사건 · ???</h3><p class="note">50층의 김성호를 넘으면, 그가 20년 동안 막아 온 것이 모습을 드러낸다.</p></div>';
+  const btn = (t, name, cls) => `<button class="btn sm ${cls}" data-kakha="${t}">${name}${won[t] ? ' ✓' : ''}</button>`;
+  return `<div class="card hot"><div class="row between"><h3>특별 사건 · 미결마왕 각하</h3><span class="note">권장 Lv.${REC[24] + 4}+</span></div>
+    <p class="note">읽지 않고 각하하는 미결의 마왕. 도장 낙하 · 붉은 종이 폭풍 · 졸병 소환 · 낙인 충격파 · 순간이동. 처음 이기면 인지 ${[300, 600, 1000].join('/')} · 칭호 · 이야기, 경험치·수임료 2배, 전설 무기 확률 25%.</p>
+    <div class="row wrap">${btn(0, '1심', 'red')}${won[0] ? btn(1, '항소심', 'red') : '<span class="note">1심을 이기면 항소심</span>'}${won[1] ? btn(2, '상고심', 'supreme') : ''}</div></div>`;
+}
+const kakhaChapter = () => ({ ...CHAPTERS[4], boss: 'kakha', stages: CHAPTERS[4].stages.map((n, i) => (i === 4 ? '미결마왕 각하' : n)) });
+function enterKakha(tier = 0) {
+  enterStage(5, 5, tier); if (!W || W.c !== 5) return;
+  W.kakha = true; W.id = 'kakha'; W.ch = kakhaChapter();
+  later(0.6, () => showBanner('특별 사건', `미결마왕 각하${tier ? ` · ${TIERS[tier].name}` : ''}`));
+}
+function kakhaClear() {
+  if (W.cleared) return; W.cleared = true; W.ended = true; $('#bossbar').hidden = true;
+  for (const k of W.pickups) { k.done = true; collect(k); } W.pickups = [];
+  const tier = W.tier || 0; S.kakha = S.kakha || {}; const first = !S.kakha[tier]; S.kakha[tier] = (S.kakha[tier] || 0) + 1;
+  const bonus = first ? [300, 600, 1000][tier] : 30; S.inji += bonus;
+  const title = ['각하를 각하한 자', '항소 기각의 기각', '미결 제로'][tier]; if (first && !S.titles.includes(title)) S.titles.push(title);
+  const w0 = W, finish = () => { if (W === w0 && W.loot) stageResults(first, bonus, 3); };
+  if (first && tier === 0) startDialog(kakhaEpilogue(), finish); else finish();
+  save();
+}
+function kakhaEpilogue() {
+  return [
+    ['미결마왕 각하', 'kakha', '크윽… 읽지도 않고… 각하했는데… 어째서…'],
+    ['나', 'hero', '기록은 끝까지 읽는 거야. 그게 변호사야.'],
+    ['sys', null, '붉은 종이 폭풍이 잦아들고, 각하가 한 장의 도장 자국으로 줄어든다.'],
+    ['김성호 변호사', 'kim', '…잘했어요. 20년 걸린 일을 당신이 끝냈네요.'],
+    ...(S.kimTruth ? [['김성호 변호사', 'kim', '이제 각하를 데리고 저 아래로 돌아가야 해요. 거기도 미결 사건이 산더미거든요.'], ['김성호 변호사', 'kim', '…혹시 일손이 필요하면, 그쪽 사건도 맡아 줄래요?']]
+      : [['김성호 변호사', 'kim', '내 소문이요? 하하… 소문을 전부 모아서 다시 50층에 와 봐요. 그때 다 말해 줄게요.']]),
+    ['해치', 'haechi', '각하는 봉인했지만… 저 아래 「지옥 법정」에 미결 사건이 쌓이고 있대.'],
+    ['sys', null, '[2부 예고] 지옥 법정 — 억울한 망자들의 재심이 시작된다.'],
+  ];
+}
 // 직업 변경 (해치)
-let dropArm = false, ngArm = false;
+let dropArm = false, ngArm = false, skArm = false;
 function jobSheet() {
   dropArm = false; ngArm = false;
   openSheet('진로 상담', [], () => {
@@ -1267,7 +1333,7 @@ function jobSheet() {
       <div class="choices">${pool.map((id) => `<button class="choice" data-transfer="${id}" ${S.inji >= 800 ? '' : 'disabled'}><img src="${jobPortrait(id)}" alt=""><span><span class="t">${esc(jobName(id))}</span>${S.jobs.includes(id) ? ' <span class="note">(경력 있음)</span>' : ''}<br><span class="d">${esc(JOBS[id].desc)}</span></span></button>`).join('')}</div></div>` : ''}
     ${canDrop ? `<div class="card"><h3>로스쿨 자퇴</h3><p class="note">되돌릴 수 없습니다. 재입학 불가. 대신 리걸테크 CEO · 정치 신인 · 법률 유튜버의 길이 열립니다.</p>${dropArm ? '<button class="btn red sm" data-act="dropout2">정말 자퇴 (되돌릴 수 없음)</button>' : '<button class="btn red sm" data-act="dropout">자퇴서 제출</button>'}</div>` : ''}
     ${S.dropout ? '' : `<div class="card"><h3>히든 직업</h3>${HIDDEN_JOBS.filter((h) => !S.jobs.includes(h)).map((h) => `<div class="choice" style="opacity:.6"><img src="${jobPortrait(h)}" alt="" style="filter:brightness(0) opacity(.6)"><span><span class="t">???</span><br><span class="d">${esc(HIDDEN_HINTS[h])}</span></span></div>`).join('') || '<p>모두 해금!</p>'}</div>`}
-    ${Object.keys(S.endSeen || {}).length ? `<div class="card hot"><h3>재심 청구 <span class="note">${(S.ng || 0) + 1}회차로</span></h3><p class="note">이 슬롯에서 대학생부터 다시 시작합니다. <b>레벨·장비·스탯·스킬·법률 상식·동료·코스튬·인지·수임료는 그대로</b>, 진로와 사건 진행만 처음부터. 다른 진로를 골라 다른 엔딩을 볼 수 있어요. 회차마다 몬스터 체력 +80% · 공격 +40% · 보상 +50%, 지난 직업은 이력서 경력으로 남습니다.</p>${ngArm ? '<button class="btn red sm" data-act="retrial2">정말 재심 청구 (진로·사건 초기화)</button>' : '<button class="btn sm" data-act="retrial">재심 청구</button>'}</div>` : ''}`;
+    ${Object.keys(S.endSeen || {}).length ? `<div class="card hot"><h3>재심 청구 <span class="note">${(S.ng || 0) + 1}회차로</span></h3><p class="note">이 슬롯에서 대학생부터 다시 시작합니다. <b>레벨·장비·스탯·법률 상식·동료·코스튬·인지·수임료는 그대로</b>, 진로와 사건 진행만 처음부터. 스킬은 초기화되고 쓴 SP·수임료는 전부 돌려받아요. 다른 진로를 골라 다른 엔딩을 볼 수 있어요. 회차마다 몬스터 체력 +80% · 공격 +40% · 보상 +50%, 지난 직업은 이력서 경력으로 남습니다.</p>${ngArm ? '<button class="btn red sm" data-act="retrial2">정말 재심 청구 (진로·사건 초기화)</button>' : '<button class="btn sm" data-act="retrial">재심 청구</button>'}</div>` : ''}`;
   }, null, 'jobs');
 }
 
@@ -1290,6 +1356,7 @@ function boardRender(tab) {
   <div class="card ${survOk ? '' : 'locked'}"><div class="row between"><h3>로스쿨 서바이벌</h3><span class="note">최고 ${S.best.surv}웨이브</span></div><p class="note">끝없이 몰려오는 시험 마물을 버텨라. 웨이브마다 한 단계씩 강해지고 5웨이브마다 시험 감독관(정예). 처치 보상은 30%, 탈락 보상은 웨이브에 비례.</p>${survOk ? '<button class="btn red sm" data-act="surv">도전</button>' : '<span class="note">2장 「도서관의 그림자」 완료 후 열림</span>'}</div>
   ${daily.length ? `<div class="card"><h3>오늘의 의뢰 완료</h3>${daily.map((d) => `<div class="row between"><span>${esc(MOBS[d.m].name)} ${d.n}마리</span><button class="btn sm" data-daily="${d.id}">보상 ₩${fmt(d.gold)} · 인지 ${d.inji}</button></div>`).join('')}</div>` : ''}
   <div class="card"><div class="row between"><h3>${esc(ch.name)}</h3><span class="note">${esc(ch.place)} · ${TYPE_LABEL[ch.type]}</span></div>
+    ${c === 5 ? kakhaCard() : ''}
     ${paid ? `<div class="row between" style="gap:8px"><span class="note" style="color:var(--stamp)">${TRIAL_CH + 1}장부터는 정식판에서 열려요</span><button class="btn red sm" data-act="trial">정식판 보기</button></div>` : ''}
     ${!chOpen && c > 1 && !chapterReqOk(c) && S.cleared[sid(c - 1, 5)] ? `<p style="color:var(--hp)">${esc(ch.req.why)}</p>` : ''}
     ${drops.length ? `<p>이 장에서 모을 수 있는 퀘스트 아이템: <b style="color:var(--exp)">${drops.map(esc).join(', ')}</b></p>` : ''}
@@ -1329,6 +1396,7 @@ function kimPrep() {
   const known = S.rumors.slice().sort((a, b) => a - b);
   const renderK = () => `
     <div class="card"><div class="row" style="gap:10px"><img src="assets/boss_kim.png" alt="" style="width:70px;height:90px;object-fit:contain"><p>문 너머에 김성호 변호사가 있다. 소문이 무성하다. <b>믿는 소문만큼 싸움이 소문처럼 변한다.</b> 소문을 켤수록 어렵고, 보상이 커진다.</p></div></div>
+    ${(() => { const n = S.rumorOn.filter((i) => S.rumors.includes(i)).length; return `<div class="card"><p class="note">켠 소문 하나마다 <b>보스 체력 +10% · 경험치·수임료 +10% · 인지 +20</b>.<br>${[[3, '3개: 김성호가 소문에 반응한다'], [6, '6개: 마지막 페이즈에 「뿔 그림자」가 드러난다'], [RUMORS.length, `${RUMORS.length}개 전부: 이기면 「소문의 진실」 · 칭호 · 악마 뿔`]].map(([k, t]) => `<span style="color:${n >= k ? 'var(--exp)' : 'var(--mute)'}">${n >= k ? '✔' : '·'} ${t}</span>`).join('<br>')}</p></div>`; })()}
     <div class="card"><h3>소문 레벨 ${S.rumorOn.filter((i) => S.rumors.includes(i)).length}</h3>${known.length ? known.map((i) => `<label class="stat" style="cursor:pointer"><span>“${esc(RUMORS[i].line)}”<br><span class="note">${esc(RUMORS[i].eff)}</span></span><span></span><input type="checkbox" data-rum="${i}" ${S.rumorOn.includes(i) ? 'checked' : ''}></label>`).join('') : '<p>모은 소문이 없다. 정예·중간 보스의 「비밀 쪽지」를 모으면 켤 수 있다.</p>'}</div>
     <button class="btn" data-act="kimgo">50층 대표변호사실로</button>`;
   openSheet('김성호 법률사무소 · 50층', [], renderK, null, 'kim');
@@ -1356,13 +1424,14 @@ function onSheetClick(ev) {
   if (d.unres) { S.resume = S.resume.filter((x) => x !== d.unres); statCache = null; updateBadges(); refreshSheet(); return; }
   if (d.own) { purchase(d.own); return; }
   if (d.pack) { buyInji(d.pack); return; }
+  if (d.kakha !== undefined) { closeSheet(); enterKakha(+d.kakha); return; }
   if (d.gfx) { setGfx(d.gfx); refreshSheet(); return; }
   if (d.bbook) { const cost = d.bbook === 'b2' ? 300 : 800; if (S.inji < cost) return; S.inji -= cost; S.books[d.bbook]++; toast(`${BOOKS[d.bbook].name} 구매`); SFX.play('coin'); refreshSheet(); return; }
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
   if (d.acc) { const q = QMAP[d.acc]; closeSheet(); acceptQuest(q); return; }
   if (d.learn) { const sk = SKILLS[d.learn], L = sk.learn; if (S.lv < L.lv || !S.books[L.book] || S.gold < L.gold) return; S.books[L.book]--; S.gold -= L.gold; S.skl[d.learn] = 1; ensureLoadout(); SFX.play('level'); showBanner('스킬 습득', sk.name); updateBadges(); refreshSheet(); return; }
-  if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; if (S.skl[d.skup] === 5 || S.skl[d.skup] === 10) { showBanner(S.skl[d.skup] === 5 ? '스킬 강화!' : '스킬 각성!', `${SKILLS[d.skup].name} · ${(SKILL_EVO[d.skup] || [])[S.skl[d.skup] === 5 ? 0 : 1] || ''}`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
+  if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold || skillLv(d.skup) >= skillCap(d.skup)) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; if (S.skl[d.skup] === 5 || S.skl[d.skup] === 10) { showBanner(S.skl[d.skup] === 5 ? '스킬 강화!' : '스킬 각성!', `${SKILLS[d.skup].name} · ${(SKILL_EVO[d.skup] || [])[S.skl[d.skup] === 5 ? 0 : 1] || ''}`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
   if (d.party) { const id = d.party; if (S.party.includes(id)) S.party = S.party.filter((x) => x !== id); else if (S.party.length < S.slots) S.party.push(id); statCache = null; if (W && W.kind === 'stage') buildAllies(); refreshSheet(); return; }
   if (d.cup) { const lv = S.compLv[d.cup] || 1; const cost = Math.round(600 * Math.pow(lv, 1.8)); if (S.gold < cost) return; S.gold -= cost; S.compLv[d.cup] = lv + 1; statCache = null; SFX.play('level'); refreshSheet(); return; }
   if (d.daily) { const x = S.daily.list.find((y) => y.id === d.daily); if (x && !x.claimed && x.prog >= x.n) { x.claimed = true; S.gold += x.gold; S.inji += x.inji; SFX.play('quest'); toast(`오늘의 의뢰 보상 · ₩${fmt(x.gold)} · 인지 ${x.inji}`); } refreshSheet(); return; }
@@ -1382,10 +1451,15 @@ function onSheetClick(ev) {
   else if (a === 'examfail') expel(false);
   else if (a === 'dropout') { dropArm = true; refreshSheet(); }
   else if (a === 'retrial') { ngArm = true; refreshSheet(); }
-  else if (a === 'retrial2') { ngArm = false; retrial(); closeSheet(); ensureLoadout(); checkPassives(); statCache = null; enterStage(1, 1); later(0.2, () => showBanner(`재심 ${S.ng}회차`, '레벨·장비는 그대로. 이번엔 다른 길로.')); }
+  else if (a === 'retrial2') { ngArm = false; retrial(); const rf = refundSkills((sid) => JOBS[SKILLS[sid].job].tier < 2); closeSheet(); ensureLoadout(true); checkPassives(); statCache = null; enterStage(1, 1); later(0.2, () => showBanner(`재심 ${S.ng}회차`, `레벨·장비는 그대로 · 스킬 초기화 SP ${rf.sp} 환급`)); }
   else if (a === 'dropout2') expel(true);
   else if (a === 'surv') { closeSheet(); enterSurvival(); }
   else if (a === 'restore') restorePurchases();
+  else if (a === 'skreset') {   // 두 번 눌러 확정
+    if (!skArm) { skArm = true; setTimeout(() => { skArm = false; if (sheetRender) refreshSheet(); }, 3000); refreshSheet(); return; }
+    skArm = false; if (S.inji < 200) return; S.inji -= 200; const r = refundSkills(() => true); ensureLoadout(); S.spSeen = 0; updateBadges();
+    toast(`스킬 초기화 · SP ${r.sp} · ₩${fmt(r.gold)} 환급`, 4000); SFX.play('level'); refreshSheet(); save();
+  }
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
   else if (a === 'bugsend') { const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
@@ -1400,7 +1474,7 @@ function onSheetClick(ev) {
   else if (a === 'tsound') { SFX.init(); S.sound = !S.sound; SFX.on = S.sound; refreshSheet(); }
   else if (a === 'tsell') { S.autoSell = !S.autoSell; refreshSheet(); }
   else if (a === 'tobag') openMenu('bag');
-  else if (a === 'retry') { const c = W.c, s = W.s, tier = W.tier || 0; closeSheet(); enterStage(c || 1, s || 1, tier); }
+  else if (a === 'retry') { const c = W.c, s = W.s, tier = W.tier || 0, kk = W.kakha; closeSheet(); if (kk) enterKakha(tier); else enterStage(c || 1, s || 1, tier); }
   else if (a === 'town') { closeSheet(); enterTown(); }
   else if (a === 'kimgo') startKim();
   else if (a === 'jobs') jobSheet();
@@ -1600,7 +1674,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
+  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.6.5-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.6.7-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -158,7 +158,7 @@ function slotCount() { return Math.min(6, SLOTS + (owns('slots') ? 3 : accLoad()
 // 재심(새 회차): 같은 슬롯에서 대학생부터. 성장(레벨·장비·스탯·스킬·상식·동료·코스튬)은 이어 가고 진로·사건만 다시
 const NG_KEEP = ['major', 'lv', 'exp', 'pts', 'sp', 'spSeen', 'law', 'trivia', 'aiUntil', 'best', 'gold', 'inji', 'cons', 'contracts', 'books', 'inv', 'equip', 'uid', 'skl', 'passives', 'resume',
   'comps', 'party', 'slots', 'compLv', 'bossPity', 'legPity', 'daily', 'boosters', 'boostUntil', 'cosTickets', 'cosPulls', 'eqPulls', 'shop', 'sound', 'music', 'autoSell', 'created',
-  'titles', 'rumors', 'rumorOn', 'seen', 'kills', 'story', 'guides', 'endSeen'];
+  'titles', 'rumors', 'rumorOn', 'seen', 'kills', 'story', 'guides', 'endSeen', 'kakha', 'kimTruth'];
 function retrial() {
   const old = S, n = newState();
   for (const k of NG_KEEP) if (old[k] !== undefined) n[k] = old[k];
@@ -733,10 +733,12 @@ function playerDied() {
   if (W && W.surv) { W.ended = true; showBanner('탈락', `${W.wave}웨이브`); BGM.jingle('lose'); later(1.2, () => survivalResults()); return; } showBanner('번아웃', '멘탈이 바닥났습니다'); BGM.jingle('lose');
   later(1.2, () => { openSheet('번아웃', [], () => `
     <div class="card"><h3>사건이 속행되었습니다</h3><p>권장 레벨보다 낮다면 앞 단계를 다시 돌며 레벨과 장비를 챙기세요. 스킬·스탯·동료·이력서도 확인!</p>
-    <div class="row wrap"><button class="btn" data-act="revive" ${S.inji >= 50 ? '' : 'disabled'}>그 자리에서 부활 · 인지 50</button><button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>`, null, 'dead'); showGuide('g_death'); });
+    <div class="row wrap">${(W.revives || 0) < REVIVE_COST.length ? `<button class="btn" data-act="revive" ${S.inji >= REVIVE_COST[W.revives || 0] ? '' : 'disabled'}>그 자리에서 부활 · 인지 ${REVIVE_COST[W.revives || 0]} <small>(이번 사건 ${REVIVE_COST.length - (W.revives || 0)}회 남음)</small></button>` : '<button class="btn" disabled>부활은 사건당 2번까지</button>'}<button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>`, null, 'dead'); showGuide('g_death'); });
 }
+// 부활은 사건당 2번까지, 두 번째는 더 비싸다 (무한 부활로 긴장감이 사라지지 않게)
+const REVIVE_COST = [50, 150];
 function revive() {
-  if (S.inji < 50) return; S.inji -= 50; closeSheet();
+  const n = W.revives || 0; if (n >= REVIVE_COST.length || S.inji < REVIVE_COST[n]) return; S.inji -= REVIVE_COST[n]; W.revives = n + 1; closeSheet();
   const st = stats(); player.dead = false; player.hp = st.hp; player.mp = st.mp; player.inv = 2.5; buffs.invuln = 2;
   W.fx.push({ k: 'pillar', x: player.x, w: 60, color: '#ffe45c', t: 0, dur: 0.8 }); SFX.play('heal');
   for (const m of liveMobs()) if (Math.abs(m.x - player.x) < 200 && !m.boss) { m.vx = (m.x > player.x ? 1 : -1) * 260; m.stun = 1; }
@@ -911,6 +913,7 @@ function updateSurvival(dt) {
   if (W.wave > S.best.surv) { S.best.surv = W.wave; if (W.wave > 1) W.texts.push({ x: player.x, y: player.y - 96, s: '최고 기록 갱신!', c: '#ffe45c', t: 0, big: true }); }
 }
 function bossIntro() {
+  if (W.kakha) { if (!S.story.kakha_pre) { S.story.kakha_pre = true; startDialog(KAKHA_PRE, spawnBoss); } else spawnBoss(); return; }
   const key = `boss_${W.c}`;
   if (!S.story[key] && STORY[key]) { S.story[key] = true; startDialog(STORY[key], spawnBoss); } else spawnBoss();
 }
@@ -926,15 +929,16 @@ function midDefeated(m) {
 }
 function bossDefeated(b) {
   W.ended = true; timeScale = 0.3; SFX.play('boom'); cam.shake = 12; BGM.jingle('win');
-  showBanner(b.id === 'kim' ? '최종 변론 승리' : '승소!', b.d.name);
+  showBanner(b.id === 'kim' ? '최종 변론 승리' : b.id === 'kakha' ? '각하를 각하했다!' : '승소!', b.d.name);
   W.mobs.forEach((m) => { if (!m.dead) { m.dead = true; fxBurst(m.x, m.y - m.h / 2, '#f4f1e6', 10, true); } });
   W.eprj = [];
   const df = diff(), st = stats();
-  const expv = SCALE.exp(W.g) * 32 * st.exp * df.rew; gainExp(expv); W.loot.exp += expv;
-  dropCoins(b.x, b.y - b.h / 2, SCALE.gold(W.g) * 30 * st.gold * df.rew, 14);
+  const rm = b.id === 'kim' ? 1 + 0.1 * W.rumorSet.length : b.id === 'kakha' ? 2 : 1;   // 소문을 켤수록, 각하는 2배
+  const expv = SCALE.exp(W.g) * 32 * st.exp * df.rew * rm; gainExp(expv); W.loot.exp += expv;
+  dropCoins(b.x, b.y - b.h / 2, SCALE.gold(W.g) * 30 * st.gold * df.rew * rm, 14);
   dropItem(b.x, b.y - b.h / 2, { gradeBoost: W.tier === 2 ? 3 : W.hard ? 2 : 1 }); if (Math.random() < 0.3) dropItem(b.x, b.y - b.h / 2, { gradeBoost: 1 });
   if (Math.random() < 0.06) { const pool = Object.keys(COSMETICS).filter((id) => COSMETICS[id].grade <= 3); dropLoot(b.x, b.y - 40, 'cos', { cos: pick(pool) }); }
-  legendDrop(b.x, b.y - 50, W.tier === 2 ? 0.1 : W.hard ? 0.05 : 0.02);
+  legendDrop(b.x, b.y - 50, b.id === 'kakha' ? 0.25 : W.tier === 2 ? 0.1 : W.hard ? 0.05 : 0.02);
   const c = W.c; const pity = S.bossPity[c] || 0;
   const table = { 1: [['b1', 0.5], ['b2', 0.2]], 2: [['b2', 0.3]], 3: [['b2', 0.3], ['b3', 0.1]], 4: [['b3', 0.15], ['b2', 0.3]], 5: [['b3', 0.25]] }[c];
   let got = false;
@@ -945,6 +949,7 @@ function bossDefeated(b) {
   later(1.6, () => { timeScale = 1; stageClear(); });
 }
 function stageClear() {
+  if (W.kakha) { kakhaClear(); return; }
   if (W.cleared) return; W.cleared = true; W.ended = true;
   $('#bossbar').hidden = true;
   for (const k of W.pickups) { k.done = true; collect(k); }
@@ -960,6 +965,8 @@ function stageClear() {
   if (W.hard && !S.hard[id]) { S.hard[id] = true; bonus += 100; }
   if (W.tier === 2 && !S.supreme[id]) { S.supreme[id] = true; bonus += 200; if (id === '5-5' && !S.titles.includes('대법원 확정판결')) S.titles.push('대법원 확정판결'); }
   questClear(id, W.hard);
+  const kimWin = W.plan.boss && W.c === 5, rumorN = kimWin ? W.rumorSet.length : 0;
+  if (rumorN) bonus += 20 * rumorN;   // 소문 하나에 인지 20
   S.inji += bonus;
   if (W.plan.boss && W.c === 5 && first) { if (!S.titles.includes('김성호를 넘은 자')) S.titles.push('김성호를 넘은 자'); }
   refreshQuestUI();
@@ -968,7 +975,11 @@ function stageClear() {
   // 김성호(5-5)를 넘으면 그 직업의 엔딩 (슬롯마다 직업별 한 번)
   const endJob = W.plan.boss && W.c === 5 && ENDINGS[S.job] && !S.endSeen[S.job] ? S.job : null;
   const after = endJob ? () => playEnding(endJob, finish) : finish;
-  if (W.plan.boss && !S.story[key] && STORY[key]) { S.story[key] = true; startDialog(STORY[key], after); } else after();
+  const go = () => { if (W.plan.boss && !S.story[key] && STORY[key]) { S.story[key] = true; startDialog(STORY[key], after); } else after(); };
+  if (rumorN >= RUMORS.length && !S.kimTruth) {   // 소문 10개 전부: 진실
+    S.kimTruth = true; if (!S.titles.includes('모든 소문의 증인')) S.titles.push('모든 소문의 증인'); giveCos('horns', true);
+    startDialog(KIM_TRUTH, go);
+  } else go();
   save();
 }
 
@@ -1125,12 +1136,18 @@ function updateBoss(b, dt) {
       } else { W.eprj.push({ k: 'wave', x: b.x, y: b.y - 60, vx: Math.sign(dx) * 200, vy: 0, r: 12, dmg: b.dmg * 0.7, life: 3 }); b.cd = 1.6; b.atkA = 0.35; }
     }
   } else if (b.id === 'kim') updateKim(b, dt, dx, adx, ratio, contact);
+  else if (b.id === 'kakha') updateKakha(b, dt, dx, adx, ratio, contact);
   if (b.specialA) b.specialA = Math.max(0, b.specialA - dt);
 }
 function updateKim(b, dt, dx, adx, ratio, contact) {
   const p = player; const R = W.rumorSet;
   const ph = ratio > 0.75 ? 1 : ratio > 0.5 ? 2 : ratio > 0.25 ? 3 : 4;
-  if (ph !== b.phase) { b.phase = ph; showBanner(['', '기록 검토', '빈틈 포착', '기본권 방패', '끝까지 간다'][ph], `“${KIM_PHASE_LINES[ph]}”`); $('#boss-phase').textContent = `${ph}페이즈`; b.specialA = 1; }
+  if (ph !== b.phase) {
+    b.phase = ph; showBanner(['', '기록 검토', '빈틈 포착', '기본권 방패', '끝까지 간다'][ph], `“${KIM_PHASE_LINES[ph]}”`); $('#boss-phase').textContent = `${ph}페이즈`; b.specialA = 1;
+    // 소문 이벤트: 3개면 소문에 반응하고, 6개면 뿔 그림자가 드러난다
+    if (ph === 3 && R.length >= 3) later(1.8, () => { if (!b.dead) bossTxt(b, '그 소문… 누가 그래요?', '#c48cff'); });
+    if (ph === 4 && R.length >= 6) { b.horns = true; cam.shake = 10; later(1.8, () => { if (!b.dead) { bossTxt(b, '…반은 사실이에요.', '#ff6b6b'); showBanner('소문의 실체', '김성호의 그림자에 뿔이 돋는다'); } }); }
+  }
   b.shieldClock = (b.shieldClock || 0) + dt;
   b.shield = ph === 3 && (b.shieldClock % 8) < 5;
   if (R.includes(2)) b.hp = Math.min(b.max, b.hp + b.max * 0.004 * dt);
@@ -1151,6 +1168,34 @@ function updateKim(b, dt, dx, adx, ratio, contact) {
   if (R.includes(5)) { b.timers.r5 = b.timers.r5 ?? 5; if (b.timers.r5 <= 0) { W.fx.push({ k: 'drop', x: p.x + rand(-20, 20), t: 0, dur: 1.4, warn: 1.1, w: 60, dmg: b.dmg * 1.2 }); b.timers.r5 = 5; } }
   if (R.includes(8)) { b.timers.r8 = b.timers.r8 ?? 7; if (b.timers.r8 <= 0) { kimMimic(b); b.timers.r8 = 7; } }
   if (R.includes(9)) { b.timers.r9 = b.timers.r9 ?? 6; if (b.timers.r9 <= 0) { b.x = clamp(p.x - p.face * 80, W.arena + 30, W.arena + VW - 30); fxBurst(b.x, b.y - 50, '#ffe45c', 16); b.timers.r9 = 6; } }
+}
+// 미결마왕 각하: 도장 낙하 · 붉은 종이 폭풍 · 졸병 소환 · 낙인 충격파 · 순간이동 (페이즈마다 거세진다)
+function updateKakha(b, dt, dx, adx, ratio, contact) {
+  const p = player, ph = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
+  if (ph !== b.phase) {
+    b.phase = ph; b.atkA = 0.6; $('#boss-phase').textContent = `${ph}페이즈`;
+    showBanner(['', '읽지 않고 각하', '기한 도과', '미결의 폭풍'][ph], ['', '“제출 기한 도과. 각하.”', '“억울함은 쌓일수록 달콤하지.”', '“이 도시의 모든 사건을… 각하한다!”'][ph]);
+    if (ph === 3) { cam.shake = 10; for (let i = 0; i < 3; i++) spawnMob('stampdevil', b.x + rand(-80, 80)); }
+  }
+  if (b.state === 'wind') { b.wt -= dt; b.vx = 0; b.atkA = 0.2; if (b.wt <= 0) { shockwave(b.x, b.dmg * 1.1); fxBurst(b.x, b.y - 20, '#ff3b3b', 20, true); b.state = 'idle'; b.cd = 1.4; } return; }
+  b.vx = adx > 170 ? Math.sign(dx) * 40 : adx < 90 ? -Math.sign(dx) * 34 : 0; b.state = b.vx ? 'move' : 'idle'; contact(0.35);
+  if (W.arena != null) b.x = clamp(b.x, W.arena + 30, W.arena + VW - 30);
+  if (ph >= 2) {   // 순간이동
+    b.timers.tp = b.timers.tp ?? 7;
+    if (b.timers.tp <= 0) { fxBurst(b.x, b.y - 60, '#ff3b3b', 14, true); b.x = clamp(p.x - p.face * 110, (W.arena ?? 0) + 30, (W.arena ?? 0) + VW - 30); fxBurst(b.x, b.y - 60, '#ff3b3b', 14, true); bossTxt(b, '각하!'); b.timers.tp = ph === 3 ? 5 : 7; }
+  }
+  if (b.cd > 0) return;
+  const r = b.pat++ % (ph === 1 ? 3 : 4), a0 = Math.atan2((p.y - 30) - (b.y - 70), dx);
+  if (r === 0) {   // 각하 도장: 내 자리에 거대한 도장이 떨어진다
+    const n = ph; for (let i = 0; i < n; i++) { const x = p.x + (i - (n - 1) / 2) * 70; later(i * 0.25, () => { if (W && !W.ended) W.fx.push({ k: 'drop', x, t: 0, dur: 1.4, warn: 1.0, w: 60, dmg: b.dmg * 1.1 }); }); }
+    bossTxt(b, '각하 도장!'); b.cd = 2.2;
+  } else if (r === 1) {   // 기한 도과: 붉은 종이 폭풍
+    const k = ph === 3 ? 16 : 12; for (let i = 0; i < k; i++) { const a = i * Math.PI * 2 / k + b.pat * 0.2; W.eprj.push({ k: 'paper', x: b.x, y: b.y - 70, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 8, dmg: b.dmg * 0.5, life: 3.2, rot: 0 }); }
+    b.atkA = 0.4; b.cd = ph === 3 ? 1.6 : 2.2;
+  } else if (r === 2) {   // 읽지 않고 각하: 졸병 소환 + 따라오는 구슬
+    for (let i = 0; i < (ph === 1 ? 1 : 2); i++) spawnMob(pick(['stampdevil', 'paperimp']), b.x + rand(-70, 70));
+    W.eprj.push({ k: 'orb', x: b.x, y: b.y - 70, vx: Math.cos(a0) * 140, vy: Math.sin(a0) * 140, r: 11, dmg: b.dmg * 0.7, life: 4, home: 1 }); b.cd = 2.6;
+  } else { b.state = 'wind'; b.wt = 0.55; bossTxt(b, '붉은 낙인…', '#ffb84d'); b.cd = 2; }   // 낙인: 예비 동작 뒤 충격파
 }
 // 소문 #9: 마지막 스킬 따라 하기
 function kimMimic(b) {
@@ -1258,7 +1303,9 @@ function autoDodge(p, targets) {
     const dx = p.x - e.x, vx = e.vx || 0; if (Math.abs(e.y - (p.y - 24)) > 46) continue;
     if ((vx && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) / Math.abs(vx) < 0.38) || Math.abs(dx) < 26) { if (p.onGround) pressed.jump = true; break; }
   }
+  for (const f of W.fx) if ((f.k === 'drop' || f.k === 'lava') && f.t < (f.warn || 0) && Math.abs(f.x - p.x) < (f.w || 60) / 2 + 14) { keys.left = keys.right = false; keys[p.x >= f.x ? 'right' : 'left'] = true; return true; }   // 떨어질 자리·장판에서 비킨다
   for (const m of targets) {
+    if (m.boss && m.id === 'kakha' && m.state === 'wind' && m.wt < 0.2 && p.onGround) { pressed.jump = true; continue; }   // 낙인 충격파는 뛰어넘는다
     const dx = m.x - p.x, adx = Math.abs(dx), facing = Math.sign(m.face || 1) === Math.sign(-dx || 1);
     if (Math.abs(m.y - p.y) > 50) continue;
     if (m.state === 'dash' && adx < 120 && facing) { if (p.onGround) pressed.jump = true; continue; }   // 돌진은 뛰어넘는다

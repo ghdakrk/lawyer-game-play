@@ -288,9 +288,10 @@ const SK = {
     fxRing(p.x + p.face * 40, p.y - 30, 44, '#ffd76b'); cam.shake = 6; SFX.play('boom');
   },
   df2(p, dmg, st, e) {
-    const r = [0.35, 0.45, 0.55][e];
+    const r = 0.33 + 0.02 * skillLv('df2');   // 레벨마다 회복 +2% (Lv.1 35% → Lv.10 53%)
     p.hp = Math.min(st.hp, p.hp + st.hp * r); p.castT = 0.6;
-    circleHit(p.x, p.y - 30, 100, st.atk * 0.6, { kb: 260, color: '#ffd76b' });
+    circleHit(p.x, p.y - 30, e >= 1 ? 140 : 100, st.atk * 0.6, { kb: 260, color: '#ffd76b' });
+    if (e >= 2) { buffs.invuln = Math.max(buffs.invuln || 0, 2); W.texts.push({ x: p.x, y: p.y - 80, s: '2초 무적', c: '#8dffb0', t: 0 }); }
     W.fx.push({ k: 'pillar', x: p.x, w: 70, color: '#8dffb0', t: 0, dur: 0.9 }); fxSparkle(p.x, p.y - 30, '#8dffb0', 24); fxRing(p.x, p.y - 4, 100, '#ffd76b');
     W.texts.push({ x: p.x, y: p.y - 90, s: `+${Math.round(r * 100)}%`, c: '#8dffb0', t: 0, big: true }); SFX.play('heal');
   },
