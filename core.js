@@ -113,10 +113,17 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.1-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.2-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
+// 연령 확인 (기기에만 저장, 서버로 보내지 않음): 'adult' = 만 14세 이상, 'child' = 만 14세 미만 → 기기 저장 모드
+// 만 14세 미만은 계정·클라우드·유료 구매·제보 전송을 쓰지 않아 운영자·수탁자에게 개인정보가 가지 않는다 (개인정보 처리방침 제10조)
+const AGE_KEY = 'lawyer-age';
+let ageMode = null;
+try { const a = JSON.parse(localStorage.getItem(AGE_KEY) || 'null'); ageMode = a && a.v; } catch (e) { /* 아직 확인 전 */ }
+const isChild = () => ageMode === 'child';
+function setAge(v) { ageMode = v; try { localStorage.setItem(AGE_KEY, JSON.stringify({ v, at: Date.now() })); } catch (e) { /* 무시 */ } }
 // 조작부 높이 (기기마다 따로): 화면 아래 막대·둥근 모서리에 버튼이 가리는 폰을 위해 조작부 전체를 띄운다
 const LIFT_KEY = 'lawyer-lift', LIFTS = [[0, '낮게'], [20, '기본'], [44, '높게'], [72, '더 높게']];
 let ctrlLift = 20;
@@ -156,7 +163,8 @@ function load(n = SLOT) {
     if (raw) { const d = JSON.parse(raw); if (d && d.v === 5) { S = Object.assign(newState(), d); S.equip = Object.assign({ head: null, back: null }, S.equip); } }
   } catch (e) { /* 새 게임 */ }
 }
-function save() { if (!S.major) return; try { S.saved = now(); localStorage.setItem(slotKey(SLOT), JSON.stringify(S)); } catch (e) { /* 무시 */ } }
+let saveOff = false;   // 계정·데이터 삭제 직후: 다시 저장하지 않는다
+function save() { if (!S.major || saveOff) return; try { S.saved = now(); localStorage.setItem(slotKey(SLOT), JSON.stringify(S)); } catch (e) { /* 무시 */ } }
 // 슬롯은 기본 3칸, 영구 구매 「세이브 슬롯 +3칸」으로 6칸 (예전 테스트 구매 extraSlots도 인정)
 function slotCount() { return Math.min(6, SLOTS + (owns('slots') ? 3 : accLoad().extraSlots || 0)); }
 // 재심(새 회차): 같은 슬롯에서 대학생부터. 성장(레벨·장비·스탯·스킬·상식·동료·코스튬)은 이어 가고 진로·사건만 다시

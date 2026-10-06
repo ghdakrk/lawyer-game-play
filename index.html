@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.1-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.2-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -244,6 +244,10 @@ button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 #sh-tabs button.dot::after { content: ''; position: absolute; top: 2px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--stamp); }
 .card.hot { box-shadow: inset 0 0 0 2px var(--stamp); }
 #sheet.top { z-index: 32; }   /* 타이틀 위에서 여는 창 (엔딩 도감) */
+#agegate { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(5,7,16,.88); }
+#agegate .box { max-width: 420px; background: var(--panel); border: 2px solid var(--hl); border-radius: 14px; padding: 16px 18px; text-align: center; }
+#agegate h2 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+#agegate a { color: var(--hl); }
 #guide { position: absolute; inset: 0; z-index: 25; display: none; align-items: center; justify-content: center; background: rgba(5,7,16,.6); padding: 16px; }
 #guide.show { display: flex; }
 #guide .gbox { width: min(100%, 400px); background: var(--panel); border: 2px solid var(--hl); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); animation: tin .25s both; }

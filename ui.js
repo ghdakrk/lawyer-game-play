@@ -1088,11 +1088,14 @@ const Billing = {
     this.rc = (C.Plugins && C.Plugins.Purchases) || (C.registerPlugin && C.registerPlugin('Purchases'));
     try { await this.rc.configure({ apiKey: key }); this.ready = true; } catch (e) { logErr(`결제 초기화 실패: ${e && e.message}`); }
   },
-  get test() { return !this.ready; },
+  // 키가 없거나 웹이면 테스트 모드(바로 지급). 앱에서는 처음 결제·구매 복원을 누를 때 결제 서비스에 연결한다 (그 전엔 아무것도 보내지 않음)
+  get test() { const C = window.Capacitor; return !this.native() || !RC_KEY[C.getPlatform()]; },
+  async ensure() { if (!this.ready) await this.init(); if (!this.ready) toast('결제 서비스에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요'); return this.ready; },
   // 결제가 끝나면 true (취소·실패는 false). 테스트 모드는 바로 true
   async buy(key) {
+    if (isChild()) { toast('만 14세 미만은 유료 상품을 살 수 없어요'); return false; }
     if (this.test) return true;
-    if (this.busy) return false;
+    if (this.busy || !(await this.ensure())) return false;
     this.busy = true;
     try {
       const id = PRODUCT_ID[key]; const r = await this.rc.getProducts({ productIdentifiers: [id], type: 'NON_SUBSCRIPTION' });
@@ -1107,12 +1110,14 @@ const Billing = {
   },
   // 스토어에 남은 구매 기록 → 영구 상품 id 목록
   async restore() {
-    if (this.test) return null;
+    if (this.test || isChild()) return null;
+    if (!(await this.ensure())) throw new Error('결제 서비스 연결 실패');
     const r = await this.rc.restorePurchases(); const tx = (r && r.customerInfo && r.customerInfo.nonSubscriptionTransactions) || [];
     const ids = new Set(tx.map((t) => t.productIdentifier));
     return STORE.filter((p) => ids.has(PRODUCT_ID[p.id])).map((p) => p.id);
   },
 };
+const childNote = () => (isChild() ? '<p class="note" style="color:var(--stamp)">만 14세 미만(기기 저장 모드)은 유료 상품을 살 수 없어요. 인지는 게임 안에서 모아 쓰세요.</p>' : '');
 const testNote = () => (Billing.test ? '<div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div>' : '');
 const storeVisible = (p) => (p.all ? !STORE.some((x) => !x.all && owns(x.id)) : true);
 // 스토어 결제가 끝나면 grantOwned (테스트 모드는 바로)
@@ -1185,14 +1190,14 @@ function injiCard() {
     <p class="note">뽑기 · 비급 · 이직 신청서 · AI 법률비서 · 경험치 부스터에 써요. 상품마다 <b>첫 구매는 2배</b>.</p>
     <div class="row between"><span><b>월간 사무지원</b> <span class="note" style="color:var(--exp)">가장 이득</span><br><span class="note">즉시 인지 ${MONTHLY.now} + ${MONTHLY.days}일간 매일 ${MONTHLY.daily} (총 ${fmt(MONTHLY.now + MONTHLY.daily * MONTHLY.days)})${left ? ` · <b style="color:var(--exp)">${left}일 남음</b>` : ''}</span></span><button class="btn sm red" data-act="monthly">${won(MONTHLY.price)}</button></div>
     ${INJI_PACKS.map((p) => `<div class="row between"><span><b>인지 ${fmt(p.inji)}</b>${p.bonus ? ` <span class="note">+${fmt(p.bonus)} 보너스</span>` : ''}${packs[p.id] ? '' : ' <span class="note" style="color:var(--stamp)">첫 구매 2배</span>'}</span><button class="btn sm" data-pack="${p.id}">${won(p.price)}</button></div>`).join('')}
-    ${testNote()}</div>`;
+    ${childNote()}${testNote()}</div>`;
 }
 const toCharge = () => setTimeout(() => { const el = $('#inji-shop'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 60);
 function storeCard() {
   return `<div class="card"><div class="row between"><h3>영구 구매 · 패키지</h3><button class="btn ghost sm" data-act="restore">구매 복원</button></div>
     <p class="note">한 번 사면 영구. 모든 슬롯에 적용되고, 앱을 지웠다 깔거나 폰을 바꿔도 「구매 복원」으로 돌아옵니다. 인지는 아래 「인지 충전」에서.</p>
     ${STORE.filter(storeVisible).map((p) => `<div class="row between"><span><b>${esc(p.name)}</b>${p.id === 'starter' && !owns('starter') ? ' <span class="note" style="color:var(--stamp)">첫 결제 추천</span>' : ''}<br><span class="note">${esc(p.d)}</span></span>${owns(p.id) ? '<span class="note" style="color:var(--exp);flex:none">보유</span>' : `<button class="btn sm ${p.id === 'full' || p.all ? 'red' : ''}" data-own="${p.id}">${won(p.price)}</button>`}</div>`).join('')}
-    ${testNote()}</div>`;
+    ${childNote()}${testNote()}</div>`;
 }
 function shopTab() {
   const lv = Math.min(10, 1 + Math.floor(S.eqPulls / 30)); const c = Math.max(0, ...Object.keys(S.cleared).map((k) => parseSid(k).c)) || 1;
@@ -1268,14 +1273,18 @@ function optTab() {
     <div class="stat"><span><b>배경음악</b><br><span class="note">맵마다 다른 곡. assets/bgm 에 mp3를 넣으면 그 곡으로 바뀝니다.</span></span><span></span><button class="btn sm ${S.music ? '' : 'ghost'}" data-act="tmusic">${S.music ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>그래픽</b><br><span class="note">렉이 있으면 「낮음」. 「자동」은 렉을 감지해 스스로 낮춰요${GFX === 'auto' ? ` · 지금 ${['높음', '중간', '낮음'][gfxLevel]}` : ''}</span></span><span></span><span class="row" style="gap:3px;flex-wrap:wrap;justify-content:flex-end">${[['auto', '자동'], ['high', '높음'], ['mid', '중간'], ['low', '낮음']].map(([k, n]) => `<button class="btn sm ${GFX === k ? '' : 'ghost'}" data-gfx="${k}">${n}</button>`).join('')}</span></div>
     <div class="stat"><span><b>조작부 높이</b><br><span class="note">공격·점프 버튼이나 화면 아래가 가리면 「높게」. 이 기기에만 적용</span></span><span></span><span class="row" style="gap:3px;flex-wrap:wrap;justify-content:flex-end">${LIFTS.map(([v, n]) => `<button class="btn sm ${ctrlLift === v ? '' : 'ghost'}" data-lift="${v}">${n}</button>`).join('')}</span></div>
+    <div class="stat"><span><b>연령 확인</b><br><span class="note">${isChild() ? '만 14세 미만 · 기기 저장 모드 (계정·결제·제보 전송 없음)' : '만 14세 이상'} · 이 기기에만 저장</span></span><span></span><button class="btn ghost sm" data-act="age">바꾸기</button></div>
     <div class="stat"><span><b>효과음</b></span><span></span><button class="btn sm ${S.sound ? '' : 'ghost'}" data-act="tsound">${S.sound ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>일반 장비 자동 판매</b><br><span class="note">끼고 있는 것보다 약한 일반 등급은 줍자마자 판매</span></span><span></span><button class="btn sm ${S.autoSell ? '' : 'ghost'}" data-act="tsell">${S.autoSell ? '켬' : '끔'}</button></div></div>
   <div class="card hot"><h3>버그 제보 <span class="note">테스트 v${GAME_VERSION}</span></h3>
     <p class="note">어디서 무엇을 하다가 어떤 문제가 생겼는지 적어 주세요. 기기·진행 상황·최근 오류가 자동으로 붙습니다. 화면 캡처도 같이 보내 주시면 큰 도움이 돼요.</p>
     <textarea id="bug-text" rows="3" placeholder="예: 3-2에서 줄을 타다가 캐릭터가 벽에 끼었어요"></textarea>
-    <div class="row wrap"><button class="btn sm" data-act="bugsend">제보 보내기 (카톡·메일)</button><button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
+    ${isChild() ? '<p class="note">만 14세 미만은 보호자에게 부탁해 보호자의 메일로 보내 주세요.</p>' : '<label class="note" style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="bug-ok" style="margin-top:3px"><span>(선택) 적은 내용과 함께 앱 버전·기기·화면 정보·진행 상황·최근 오류 기록을 운영자에게 보내는 데 동의합니다. 문제 확인에만 쓰고 처리가 끝나면 지웁니다. 동의하지 않아도 게임은 그대로 할 수 있어요.</span></label>'}
+    <div class="row wrap">${isChild() ? '' : '<button class="btn sm" data-act="bugsend">제보 보내기 (카톡·메일)</button>'}<button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
   <div class="card"><h3>프로토타입 정보</h3><p>v${GAME_VERSION}. 아트는 Higgsfield(GPT Image 2.5) 프레임 시트. 음악은 코드로 만든 칩튠. 저장은 이 브라우저에만 됩니다.</p>
-  <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>`;
+  <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>
+  <div class="card"><h3>계정·데이터 삭제</h3><p class="note">이 기기의 모든 슬롯·엔딩 도감·구매 기록·설정을 지웁니다. 되돌릴 수 없어요. 영구 상품은 같은 스토어 계정으로 「구매 복원」하면 다시 받을 수 있지만, 진행과 인지 잔액은 복구되지 않습니다. <a href="${PRIVACY_URL}#delete" target="_blank" rel="noopener" style="color:var(--hl)">개인정보 처리방침</a> 제9조.</p>
+    <button class="btn red sm" data-act="wipe">${wipeArm ? '정말 모두 삭제 (되돌릴 수 없음)' : '계정·데이터 삭제'}</button></div>`;
 }
 // 테스트용: 오류 기록 · 버그 제보 · 세이브 파일 주고받기
 const ERRLOG = [];
@@ -1393,7 +1402,7 @@ function kakhaEpilogue() {
   ];
 }
 // 직업 변경 (해치)
-let dropArm = false, ngArm = false, skArm = false;
+let dropArm = false, ngArm = false, skArm = false, wipeArm = false;
 function jobSheet() {
   dropArm = false; ngArm = false;
   openSheet('진로 상담', [], () => {
@@ -1536,7 +1545,7 @@ function onSheetClick(ev) {
   }
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
-  else if (a === 'bugsend') { const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
+  else if (a === 'bugsend') { if (isChild()) return; if (!($('#bug-ok') || {}).checked) { toast('보낼 정보에 동의(체크)해야 보낼 수 있어요'); return; } const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
   else if (a === 'savefile') exportSave();
   else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();
@@ -1560,6 +1569,8 @@ function onSheetClick(ev) {
   else if (a === 'quizpass') { const q = quiz.q; S.q[q.id].quiz = true; closeSheet(); turnIn(q); }
   else if (a === 'close') closeSheet();
   else if (a === 'totitle') { closeSheet(); save(); showTitle(); }
+  else if (a === 'age') { closeSheet(); ageGate(() => { if (player) openMenu('opt'); }); }
+  else if (a === 'wipe') { if (!wipeArm) { wipeArm = true; setTimeout(() => { wipeArm = false; if (sheetRender) refreshSheet(); }, 4000); refreshSheet(); return; } wipeArm = false; wipeAll(); }
   else if (a === 'reset') { deleteSlot(SLOT); S = newState(); closeSheet(); showTitle(); }
   else if (a === 'endok') endingDone();
 }
@@ -1599,6 +1610,22 @@ function slotCard(n) {
 }
 function firstEmptySlot() { for (let n = 1; n <= slotCount(); n++) if (!readSlot(n)) return n; return 0; }
 function firstFullSlot() { for (let n = 1; n <= slotCount(); n++) if (readSlot(n)) return n; return 0; }
+const PRIVACY_URL = 'https://ghdakrk.github.io/lawyer-game-play/privacy.html';
+// 처음 실행: 연령 확인 (만 14세 미만이면 기기 저장 모드). 자동 테스트(webdriver)에서는 건너뛴다
+function ageGate(next) {
+  const old = document.getElementById('agegate'); if (old) old.remove();
+  const el = document.createElement('div'); el.id = 'agegate';
+  el.innerHTML = `<div class="box"><h2>나이를 알려 주세요</h2><p>만 14세 미만이면 <b>기기 저장 모드</b>로 해요. 계정·클라우드 저장·유료 구매 없이, 게임 기록은 이 기기에만 저장되고 아무 데도 보내지 않아요.</p>
+    <div class="row wrap" style="justify-content:center"><button class="btn" data-age="adult">만 14세 이상이에요</button><button class="btn ghost" data-age="child">만 14세 미만이에요</button></div>
+    <p class="note">답은 이 기기에만 저장되고, 설정 → 연령 확인에서 바꿀 수 있어요. <a href="${PRIVACY_URL}" target="_blank" rel="noopener">개인정보 처리방침</a></p></div>`;
+  el.addEventListener('click', (ev) => { const b = ev.target.closest('[data-age]'); if (!b) return; setAge(b.dataset.age); el.remove(); SFX.play('coin'); if (next) next(); });
+  document.body.appendChild(el);
+}
+function wipeAll() {
+  saveOff = true; S = newState();
+  try { for (let n = 1; n <= 6; n++) deleteSlot(n); for (const k of [ACC_KEY, SAVE_KEY, AGE_KEY]) localStorage.removeItem(k); } catch (e) { /* 무시 */ }
+  accRaw = null; accObj = null; toast('이 기기의 계정·게임 데이터를 모두 지웠어요', 3000); setTimeout(() => window.location.reload(), 900);
+}
 function showTitle() {
   scene = 'title'; W = null; player = null; save();
   const t = $('#title'); t.classList.add('show');
@@ -1611,6 +1638,7 @@ function showTitle() {
     <div class="row wrap" style="justify-content:center"><button class="btn ghost sm" id="t-ends">엔딩 도감 ${got}/${ENDING_IDS.length}</button></div>
     <p class="note">슬롯마다 다른 직업으로 키워 보세요. 엔딩은 슬롯을 넘어 모입니다. · 전부 무료 · 현직 변호사가 만든 법조인 성장 액션 RPG · v${GAME_VERSION} · 버그 제보: 메뉴 → 설정</p>`;
   BGM.play('title');
+  if (!ageMode && !window.navigator.webdriver) ageGate();
   t.onclick = (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
     SFX.init(); BGM.ensure();
@@ -1745,7 +1773,7 @@ function init() {
     if (document.hidden) { save(); if (BGM.el) BGM.el.pause(); if (SFX.ctx && SFX.ctx.state === 'running') SFX.ctx.suspend(); }
     else { if (BGM.el && BGM.on) BGM.el.play().catch(() => { }); if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); }
   });
-  appHooks(); Billing.init();
+  appHooks();
   setInterval(() => { if (S.major) { save(); monthlyTick(); } }, 10000);
   layout();
   $('#b-hp').insertAdjacentHTML('afterbegin', `<span class="ic" style="${iconStyle('loot', LOOT.gimbap)};width:26px;height:26px;background-size:400% 300%;display:block"></span>`);
@@ -1764,7 +1792,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
+  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, ageGate, get ageMode() { return ageMode; }, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

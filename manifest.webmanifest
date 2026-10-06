@@ -13,7 +13,7 @@
  "orientation": "any",
  "background_color": "#05060c",
  "theme_color": "#05060c",
- "description": "현직 변호사가 만든 법조인 성장 액션 RPG (테스트 0.7.1-test)",
+ "description": "현직 변호사가 만든 법조인 성장 액션 RPG (테스트 0.7.2-test)",
  "icons": [
   {
    "src": "icons/icon-192.png",
