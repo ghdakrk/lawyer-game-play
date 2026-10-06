@@ -772,7 +772,7 @@ function badgeState() {
 }
 function updateBadges() {
   const b = badgeState(); const any = b.stat || b.skill || b.resume;
-  const el = $('#badge-menu'); if (el) { el.hidden = !any; el.textContent = b.stat ? S.pts : '!'; }
+  const el = $('#badge-menu'); if (el) { el.hidden = !any; el.textContent = ''; $('#b-menu').title = b.stat ? `스탯 포인트 ${S.pts}` : '새 소식'; }
   document.querySelectorAll('#sh-tabs button').forEach((t) => t.classList.toggle('dot', !!b[t.dataset.tab]));
 }
 // 성장 안내
@@ -1133,7 +1133,7 @@ function optTab() {
   <div class="card hot"><h3>버그 제보 <span class="note">테스트 v${GAME_VERSION}</span></h3>
     <p class="note">어디서 무엇을 하다가 어떤 문제가 생겼는지 적어 주세요. 기기·진행 상황·최근 오류가 자동으로 붙습니다. 화면 캡처도 같이 보내 주시면 큰 도움이 돼요.</p>
     <textarea id="bug-text" rows="3" placeholder="예: 3-2에서 줄을 타다가 캐릭터가 벽에 끼었어요"></textarea>
-    <div class="row wrap"><button class="btn sm" data-act="bugsend">제보 보내기 (카톡·메일)</button><button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button><label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
+    <div class="row wrap"><button class="btn sm" data-act="bugsend">제보 보내기 (카톡·메일)</button><button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
   <div class="card"><h3>프로토타입 정보</h3><p>v${GAME_VERSION}. 아트는 Higgsfield(GPT Image 2.5) 프레임 시트. 음악은 코드로 만든 칩튠. 저장은 이 브라우저에만 됩니다.</p>
   <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>`;
 }
@@ -1172,6 +1172,49 @@ function importSave(file) {
   };
   r.readAsText(file);
 }
+// 카카오톡 같은 앱 안 브라우저: 「홈 화면에 추가」가 안 되고 화면도 좁으며 저장도 크롬·사파리와 따로 논다
+// → 크롬·사파리로 열면서 세이브(슬롯 전부 + 엔딩·구매)를 주소 뒤(#mig=)에 압축해 실어 보낸다
+const UA = window.navigator.userAgent;
+const isKakao = () => /KAKAOTALK/i.test(UA);
+const inApp = () => isKakao() || /NAVER\(inapp|Instagram|FBAN|FBAV|; wv\)|Line\//i.test(UA);
+const b64u = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return window.btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = (s) => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const bin = window.atob(s), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; };
+async function packSaves() {
+  const d = { v: 1, slots: {}, acc: accLoad() };
+  for (let n = 1; n <= 6; n++) { const raw = localStorage.getItem(slotKey(n)); if (raw) d.slots[n] = raw; }
+  const bytes = new window.TextEncoder().encode(JSON.stringify(d));
+  if (!window.CompressionStream) return 'j' + b64u(bytes);
+  const zs = new window.Blob([bytes]).stream().pipeThrough(new window.CompressionStream('gzip'));
+  return 'z' + b64u(new Uint8Array(await new window.Response(zs).arrayBuffer()));
+}
+function openExternal() {
+  save();
+  packSaves().catch(() => '').then((code) => {
+    const base = window.location.href.split('#')[0], url = code && code.length < 100000 ? `${base}#mig=${code}` : base;
+    if (isKakao()) window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
+    else toast('오른쪽 위 메뉴(⋮)에서 「다른 브라우저로 열기」를 눌러 주세요', 5000);
+  });
+}
+async function importMigration(code) {
+  try {
+    const bytes = unb64u(code.slice(1));
+    const json = code[0] === 'z' ? await new window.Response(new window.Blob([bytes]).stream().pipeThrough(new window.DecompressionStream('gzip'))).text() : new window.TextDecoder().decode(bytes);
+    const d = JSON.parse(json), a = accLoad(), b = d.acc || {};
+    for (const [k, v] of Object.entries(b.endings || {})) a.endings[k] = a.endings[k] || v;
+    for (const [k, v] of Object.entries(b.owned || {})) a.owned[k] = a.owned[k] || v;
+    if (b.extraSlots) a.extraSlots = Math.max(a.extraSlots || 0, b.extraSlots);
+    accSave(a);
+    let moved = 0, left = 0;
+    for (const [n, raw] of Object.entries(d.slots || {})) {
+      let k = +n; if (localStorage.getItem(slotKey(k))) { k = 0; for (let m = 1; m <= slotCount(); m++) if (!localStorage.getItem(slotKey(m))) { k = m; break; } }
+      if (k) { localStorage.setItem(slotKey(k), raw); moved++; } else left++;
+    }
+    toast(moved ? `카카오톡에서 하던 세이브 ${moved}개를 옮겼어요${left ? ` · 빈 슬롯이 없어 ${left}개는 못 옮김` : ''}` : '옮길 세이브가 없어요', 5000);
+  } catch (e) { toast('세이브를 옮기지 못했어요. 설정 → 「세이브 파일 저장」으로 옮겨 주세요', 5000); }
+  try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* 무시 */ }
+}
+const inAppNote = () => (isKakao() ? '<div class="inapp-note">카카오톡 안에서 열려 있어요. 화면이 좁고 「홈 화면에 추가」가 안 되며, 저장도 크롬·사파리와 따로예요.<br><button class="btn sm" id="t-ext">크롬·사파리로 열기 (세이브도 같이)</button></div>'
+  : inApp() ? '<div class="inapp-note">앱 안 브라우저에서 열려 있어요. 오른쪽 위 메뉴(⋮)에서 「다른 브라우저로 열기」를 눌러 주세요. 세이브는 설정 → 「세이브 파일 저장」으로 옮길 수 있어요.</div>' : '');
 // 직업 변경 (해치)
 let dropArm = false, ngArm = false;
 function jobSheet() {
@@ -1305,6 +1348,7 @@ function onSheetClick(ev) {
   else if (a === 'restore') restorePurchases();
   else if (a === 'bugsend') { const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
   else if (a === 'savefile') exportSave();
+  else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();
   else if (a === 'trial') { closeSheet(); trialSheet(); }
   else if (a === 'buyai') { if (S.inji < 300) return; S.inji -= 300; S.aiUntil = Math.max(now(), S.aiUntil) + 7 * 864e5; toast('AI 법률비서 7일 · AUTO 공격력 90% + 스킬 사용'); SFX.play('coin'); refreshSheet(); }
@@ -1373,6 +1417,7 @@ function showTitle() {
   const acc = accLoad(), got = ENDING_IDS.filter((id) => acc.endings[id]).length;
   t.innerHTML = `<div class="heroes"><img src="${heroes[0]}" alt=""><img src="${heroes[1]}" alt=""><img src="assets/npc_haechi.png" alt="" style="height:clamp(40px,10vw,74px)"><img src="${heroes[2]}" alt=""><img src="${heroes[3]}" alt=""></div>
     <h1>법조인 키우기</h1><p class="sub">로스쿨 서바이벌 · 끝까지 살아남아라</p>
+    ${inAppNote()}
     <div class="slots">${Array.from({ length: slotCount() }, (_, i) => slotCard(i + 1)).join('')}</div>
     <div class="row wrap" style="justify-content:center"><button class="btn ghost sm" id="t-ends">엔딩 도감 ${got}/${ENDING_IDS.length}</button></div>
     <p class="note">슬롯마다 다른 직업으로 키워 보세요. 엔딩은 슬롯을 넘어 모입니다. · ${fullGame() ? '정식판' : `체험판 · 1~${TRIAL_CH}장 무료`} · 현직 변호사가 만든 법조인 성장 액션 RPG · v${GAME_VERSION} · 버그 제보: 메뉴 → 설정</p>`;
@@ -1384,6 +1429,7 @@ function showTitle() {
     else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); }
     else if (b.dataset.slotDel) { const n = +b.dataset.slotDel; if (slotArm === n) { deleteSlot(n); slotArm = 0; } else { slotArm = n; setTimeout(() => { if (slotArm === n && scene === 'title') { slotArm = 0; showTitle(); } }, 3000); } showTitle(); }
     else if (b.id === 't-ends') endingGallery();
+    else if (b.id === 't-ext') openExternal();
   };
 }
 // 엔딩: 대사 → 일러스트 카드. 슬롯에는 본 엔딩, 계정에는 모은 엔딩
@@ -1482,7 +1528,10 @@ function init() {
   setInterval(() => { if (S.major) save(); }, 10000);
   layout();
   $('#b-hp').insertAdjacentHTML('afterbegin', `<span class="ic" style="${iconStyle('loot', LOOT.gimbap)};width:26px;height:26px;background-size:400% 300%;display:block"></span>`);
-  loadAssets((f) => { const el = $('#loading'); if (el) el.textContent = `사건 기록을 불러오는 중… ${Math.round(f * 100)}%`; }).then(() => { $('#loading').remove(); showTitle(); requestAnimationFrame(frame); });
+  loadAssets((f) => { const el = $('#loading'); if (el) el.textContent = `사건 기록을 불러오는 중… ${Math.round(f * 100)}%`; }).then(() => {
+    $('#loading').remove(); showTitle(); requestAnimationFrame(frame);
+    if (window.location.hash.startsWith('#mig=')) importMigration(window.location.hash.slice(5)).then(() => { if (scene === 'title') showTitle(); });   // 카카오톡에서 넘어온 세이브
+  });
 }
 
 // 테스트 훅
@@ -1494,7 +1543,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob,
+  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, packSaves, importMigration,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

@@ -20,6 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
 <style>
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }   /* 카카오톡 등 웹뷰의 글자 크기 설정이 화면 배치를 깨지 않게 */
 /* Layout: action game. Portrait → game view on top, control pad below. Landscape → full-bleed view with overlaid pad.
    Visual world: night-time legal district — court navy, case-file paper, highlighter yellow, revenue-stamp red. */
 :root {
@@ -165,6 +166,8 @@ button.slot { font: inherit; color: inherit; }
 .tease img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; filter: blur(5px) brightness(.55); }
 .tease span { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-display); font-size: 22px; color: #fff; text-shadow: 0 2px 6px #000; }
 .plist { margin: 6px 0 10px; padding-left: 18px; line-height: 1.6; }
+.inapp-note { max-width: 420px; margin: 0 12px; padding: 8px 12px; border: 1px solid var(--hl); border-radius: 10px; background: rgba(255,228,92,.1); font-size: 13px; line-height: 1.5; text-align: center; color: var(--fg); }
+.inapp-note .btn { margin-top: 6px; }
 #sheet textarea { width: 100%; box-sizing: border-box; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; resize: vertical; margin: 6px 0; }
 .gc0 { color: var(--g0); } .gc1 { color: var(--g1); } .gc2 { color: var(--g2); } .gc3 { color: var(--g3); } .gc4 { color: var(--g4); }
 .stat { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 6px 8px; background: var(--panel); border-radius: 8px; }
@@ -229,7 +232,7 @@ button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; z-index: 40; background: #070910; color: var(--mute); }
 /* v4: badges, guide, loadout, resume, cosmetics */
 .hbtn { position: relative; }
-.badge { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--stamp); color: #fff; font-size: 10px; line-height: 16px; font-weight: 700; text-align: center; box-shadow: 0 0 0 2px #070910; animation: pulse 1.2s ease-in-out infinite; }
+.badge { position: absolute; top: -3px; right: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--stamp); box-shadow: 0 0 0 2px #0b0e1c, 0 0 8px rgba(255,80,60,.7); font-size: 0; pointer-events: none; }   /* 글자를 가리지 않게 빨간 점만 */
 .badge[hidden] { display: none; }
 @keyframes pulse { 50% { transform: scale(1.18); } }
 #sh-tabs button { position: relative; }
