@@ -114,6 +114,11 @@ const SFX = {
 // 상태 · 저장
 // ======================================================================
 const GAME_VERSION = '0.6.5-test';                // 버그 제보에 붙는 버전
+// 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
+const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
+let GFX = 'auto', gfxLevel = 0;
+try { GFX = localStorage.getItem(GFX_KEY) || 'auto'; gfxLevel = GFX === 'auto' ? Math.min(2, +(localStorage.getItem(GFX_LV_KEY) || 0)) : ({ high: 0, mid: 1, low: 2 }[GFX] ?? 0); } catch (e) { /* 기본값 */ }
+const fxMul = () => (gfxLevel >= 2 ? 0.5 : 1);
 const SAVE_KEY = 'lawyer-action-v5';            // v5.2까지 쓰던 단일 저장 (슬롯 1로 옮긴다)
 const SLOTS = 3;
 let SLOT = 1;

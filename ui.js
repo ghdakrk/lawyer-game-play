@@ -365,7 +365,7 @@ function drawAnim(an, key, fi, x, y, h, o = {}) {
   const dx = -w / 2, dy = -(meta.ch - 3) * k;
   if (o.tint) drawTinted(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh, o.tint);
   else {
-    if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = 12; }
+    if (o.glow && !gfxLevel) { ctx.shadowColor = o.glow; ctx.shadowBlur = 12; }
     ctx.drawImage(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh);
     ctx.shadowBlur = 0;
     if (o.flash) { ctx.globalAlpha *= o.flash; drawTinted(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh, '#ffffff'); }
@@ -558,6 +558,7 @@ function drawFigure(pose, x, y, h, face, o = {}) {
 }
 function bestGrade() { let g = -1; for (const k of ['weapon', 'armor', 'acc', 'gear']) { const it = S.inv.find((x) => x.uid === S.equip[k]); if (it) g = Math.max(g, it.grade + Math.floor((it.en || 0) / 5)); } return Math.min(4, g); }
 function drawAura(x, y, h, t) {
+  if (gfxLevel >= 2) return;
   const g = bestGrade(); if (g < 2) return;
   const col = ['', '', '#6aa9ff', '#c48cff', '#ffb84d'][g];
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -1164,6 +1165,7 @@ function optTab() {
   return `<div class="card"><h3>조작</h3><p>키보드: ←→ 이동 · ↑ 점프 (밧줄 앞에서는 오르기) · ↓ 밧줄 내리기·발판에서 내려가기 · 밧줄에 매달려 ←→ 옆으로 뛰어내리기 · Z 공격(누르고 있으면 연속) · X·Space 점프 · 근거리 직업은 공중에서 한 번 더 점프(2단 도약) · A/S/D/C 스킬 · F 궁극기 · Q 김밥 · W 믹스커피 · NPC 앞에서 Z(공격)·E 대화 · Esc 메뉴<br>휴대폰: 아무 데나 누르고 끌면 이동 · 위로 끌면 점프 (밧줄 앞에서는 오르기) · 아래로 끌면 내려가기 · 밧줄에서 옆으로 끌면 뛰어내리기 · 점프 버튼도 같다 · NPC 앞에서 공격 버튼 = 대화</p></div>
   <div class="card"><h3>소리 · 편의</h3>
     <div class="stat"><span><b>배경음악</b><br><span class="note">맵마다 다른 곡. assets/bgm 에 mp3를 넣으면 그 곡으로 바뀝니다.</span></span><span></span><button class="btn sm ${S.music ? '' : 'ghost'}" data-act="tmusic">${S.music ? '켬' : '끔'}</button></div>
+    <div class="stat"><span><b>그래픽</b><br><span class="note">렉이 있으면 「낮음」. 「자동」은 렉을 감지해 스스로 낮춰요${GFX === 'auto' ? ` · 지금 ${['높음', '중간', '낮음'][gfxLevel]}` : ''}</span></span><span></span><span class="row" style="gap:3px;flex-wrap:wrap;justify-content:flex-end">${[['auto', '자동'], ['high', '높음'], ['mid', '중간'], ['low', '낮음']].map(([k, n]) => `<button class="btn sm ${GFX === k ? '' : 'ghost'}" data-gfx="${k}">${n}</button>`).join('')}</span></div>
     <div class="stat"><span><b>효과음</b></span><span></span><button class="btn sm ${S.sound ? '' : 'ghost'}" data-act="tsound">${S.sound ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>일반 장비 자동 판매</b><br><span class="note">끼고 있는 것보다 약한 일반 등급은 줍자마자 판매</span></span><span></span><button class="btn sm ${S.autoSell ? '' : 'ghost'}" data-act="tsell">${S.autoSell ? '켬' : '끔'}</button></div></div>
   <div class="card hot"><h3>버그 제보 <span class="note">테스트 v${GAME_VERSION}</span></h3>
@@ -1181,7 +1183,7 @@ window.addEventListener('unhandledrejection', (e) => logErr(`promise: ${e.reason
 function bugReport(desc) {
   const app = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
   return [`[법조인 키우기 버그 제보] v${GAME_VERSION}`, `시간: ${new Date().toLocaleString('ko-KR')}`, `기기: ${window.navigator.userAgent}`,
-    `화면: ${window.innerWidth}×${window.innerHeight} · DPR ${window.devicePixelRatio} · ${app ? '앱(홈 화면)' : '브라우저'}`,
+    `화면: ${window.innerWidth}×${window.innerHeight} · DPR ${window.devicePixelRatio} · ${app ? '앱(홈 화면)' : '브라우저'} · 그래픽 ${GFX}/${['높음', '중간', '낮음'][gfxLevel]}`,
     `진행: 슬롯 ${SLOT} · ${jobName()} Lv.${S.lv} · 사건 ${Object.keys(S.cleared || {}).length}/25${S.ng ? ` · 재심 ${S.ng}회차` : ''} · ${fullGame() ? '정식판' : '체험판'} · 지금 ${scene}${W && W.id ? ` ${W.id}` : ''}${W && W.tier ? ` (${TIERS[W.tier].name})` : ''}`,
     `내용: ${desc || '(적지 않음)'}`, `최근 오류: ${ERRLOG.length ? `\n${ERRLOG.join('\n')}` : '없음'}`].join('\n');
 }
@@ -1354,6 +1356,7 @@ function onSheetClick(ev) {
   if (d.unres) { S.resume = S.resume.filter((x) => x !== d.unres); statCache = null; updateBadges(); refreshSheet(); return; }
   if (d.own) { purchase(d.own); return; }
   if (d.pack) { buyInji(d.pack); return; }
+  if (d.gfx) { setGfx(d.gfx); refreshSheet(); return; }
   if (d.bbook) { const cost = d.bbook === 'b2' ? 300 : 800; if (S.inji < cost) return; S.inji -= cost; S.books[d.bbook]++; toast(`${BOOKS[d.bbook].name} 구매`); SFX.play('coin'); refreshSheet(); return; }
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
@@ -1512,7 +1515,7 @@ function layout() {
   const land = ww / wh > 1.25;
   app.classList.toggle('land', land);
   const view = $('#view');
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(gfxLevel >= 2 ? 1.25 : 2, window.devicePixelRatio || 1);
   const HUD = 46;
   let cssScale;
   if (land) { view.style.height = '100%'; cssScale = wh / VH; }
@@ -1527,8 +1530,22 @@ function layout() {
   fitQtrack();
 }
 let last = performance.now();
+// 자동 그래픽: 사건 중 150프레임 평균이 24ms(약 42fps)보다 느리면 한 단계 낮춘다
+const perf = { n: 0, sum: 0 };
+function perfWatch(ms) {
+  if (GFX !== 'auto' || gfxLevel >= 2 || scene !== 'stage' || sheetOpen() || dialog.active || ms > 250) return;
+  perf.n++; perf.sum += ms; if (perf.n < 150) return;
+  const avg = perf.sum / perf.n; perf.n = perf.sum = 0; if (avg <= 24) return;
+  gfxLevel++; try { localStorage.setItem(GFX_LV_KEY, gfxLevel); } catch (e) { /* 무시 */ }
+  layout(); toast(gfxLevel === 1 ? '렉이 감지되어 빛 번짐 효과를 껐어요 (설정 → 그래픽)' : '렉이 감지되어 그래픽을 「낮음」으로 바꿨어요 (설정 → 그래픽)', 4000);
+}
+function setGfx(k) {
+  GFX = k; gfxLevel = k === 'auto' ? 0 : { high: 0, mid: 1, low: 2 }[k]; perf.n = perf.sum = 0;
+  try { localStorage.setItem(GFX_KEY, k); localStorage.setItem(GFX_LV_KEY, gfxLevel); } catch (e) { /* 무시 */ }
+  layout();
+}
 function frame(t) {
-  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  const ms = t - last, dt = Math.min(0.05, ms / 1000); last = t; perfWatch(ms);
   dialogTick(dt);
   if (scene === 'stage' || scene === 'town') update(dt);
   if (ctx) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#05060c'; ctx.fillRect(0, 0, $('#game').width, $('#game').height); render(); }

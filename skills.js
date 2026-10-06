@@ -559,11 +559,11 @@ function updateAreas(dt) {
 // ======================================================================
 // 이펙트
 // ======================================================================
-function fxBurst(x, y, color, n, paper = false) { for (let i = 0; i < n; i++) W.fx.push({ k: 'part', x, y, vx: rand(-150, 150), vy: rand(-240, -40), rot: rand(0, 6), vr: rand(-10, 10), color, t: 0, dur: rand(0.4, 0.8), paper }); }
+function fxBurst(x, y, color, n, paper = false) { n = Math.ceil(n * fxMul()); for (let i = 0; i < n; i++) W.fx.push({ k: 'part', x, y, vx: rand(-150, 150), vy: rand(-240, -40), rot: rand(0, 6), vr: rand(-10, 10), color, t: 0, dur: rand(0.4, 0.8), paper }); }
 function fxDust(x, y) { for (let i = 0; i < 4; i++) W.fx.push({ k: 'part', x: x + rand(-8, 8), y: y - 2, vx: rand(-40, 40), vy: rand(-60, -20), rot: 0, vr: 0, color: 'rgba(220,220,230,.6)', t: 0, dur: 0.35 }); }
-function fxShockDust(x, y) { for (let i = 0; i < 12; i++) W.fx.push({ k: 'part', x: x + rand(-20, 20), y: y - 2, vx: rand(-200, 200), vy: rand(-180, -40), rot: 0, vr: 0, color: 'rgba(200,190,170,.75)', t: 0, dur: 0.5 }); }
-function fxSpark(x, y, color, n) { for (let i = 0; i < n; i++) W.fx.push({ k: 'spark', x, y, vx: rand(-220, 220), vy: rand(-220, 120), color, t: 0, dur: rand(0.25, 0.5), s: rand(2, 4) }); }
-function fxSparkle(x, y, color, n) { for (let i = 0; i < n; i++) W.fx.push({ k: 'spark', x: x + rand(-18, 18), y: y + rand(-24, 16), vx: rand(-30, 30), vy: rand(-90, -20), color, t: 0, dur: rand(0.4, 0.8), s: rand(1.5, 3) }); }
+function fxShockDust(x, y) { for (let i = 0; i < 12 * fxMul(); i++) W.fx.push({ k: 'part', x: x + rand(-20, 20), y: y - 2, vx: rand(-200, 200), vy: rand(-180, -40), rot: 0, vr: 0, color: 'rgba(200,190,170,.75)', t: 0, dur: 0.5 }); }
+function fxSpark(x, y, color, n) { n = Math.ceil(n * fxMul()); for (let i = 0; i < n; i++) W.fx.push({ k: 'spark', x, y, vx: rand(-220, 220), vy: rand(-220, 120), color, t: 0, dur: rand(0.25, 0.5), s: rand(2, 4) }); }
+function fxSparkle(x, y, color, n) { n = Math.ceil(n * fxMul()); for (let i = 0; i < n; i++) W.fx.push({ k: 'spark', x: x + rand(-18, 18), y: y + rand(-24, 16), vx: rand(-30, 30), vy: rand(-90, -20), color, t: 0, dur: rand(0.4, 0.8), s: rand(1.5, 3) }); }
 function fxRing(x, y, r, color) { W.fx.push({ k: 'ring', x, y, r, color, t: 0, dur: 0.4 }); }
 
 function updateFx(dt) {
@@ -583,14 +583,14 @@ function updateFx(dt) {
     if (f.k === 'spark') { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.93; f.vy *= 0.93; }
   }
   W.fx = W.fx.filter((f) => f.t < f.dur);
-  if (W.fx.length > 400) W.fx.splice(0, W.fx.length - 400);
+  const cap = gfxLevel >= 2 ? 160 : 400; if (W.fx.length > cap) W.fx.splice(0, W.fx.length - cap);
   for (const t of W.texts) { t.t += dt; t.y -= 26 * dt; }
   W.texts = W.texts.filter((t) => t.t < 0.9);
   if (W.texts.length > 50) W.texts.splice(0, W.texts.length - 50);
 }
 
 // ---------- 그리기 (투사체·이펙트) ----------
-function glow(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
+function glow(color, blur) { if (gfxLevel) return; ctx.shadowColor = color; ctx.shadowBlur = blur; }   // 빛 번짐(shadowBlur)은 폰에서 가장 무거워 중간·낮음에서는 끈다
 function noGlow() { ctx.shadowBlur = 0; }
 function drawTrail(s, color, width) {
   if (!s.tr || s.tr.length < 2) return;
