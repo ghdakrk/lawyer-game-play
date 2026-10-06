@@ -1055,9 +1055,43 @@ function grandfather() {
   const a = accLoad(); a.owned.full = now(); a.grandfathered = true; accSave(a);
   toast('테스트 기간에 진행한 저장 → 정식판으로 인정했어요', 4500);
 }
+// 인지 충전 (소모성 유료 재화). 실제 앱에서는 스토어 결제가 확인된 뒤 지급하고, 영수증 검증·클라우드 저장을 붙인다
+const INJI_PACKS = [
+  { id: 'p1', inji: 120, bonus: 0, price: 1200 },
+  { id: 'p2', inji: 600, bonus: 60, price: 5500 },
+  { id: 'p3', inji: 1250, bonus: 250, price: 11000 },
+  { id: 'p4', inji: 3900, bonus: 1100, price: 33000 },
+];
+const MONTHLY = { price: 5500, now: 300, daily: 100, days: 30 };
+function buyInji(id) {
+  const p = INJI_PACKS.find((x) => x.id === id); if (!p) return;
+  const a = accLoad(); a.packs = a.packs || {}; const first = !a.packs[id];
+  const got = (p.inji + p.bonus) * (first ? 2 : 1);   // 상품마다 첫 구매 2배 (계정에 한 번)
+  a.packs[id] = (a.packs[id] || 0) + 1; accSave(a);
+  S.inji += got; SFX.play('coin'); toast(`인지 ${fmt(got)} 충전${first ? ' · 첫 구매 2배!' : ''} (테스트)`, 3500); refreshSheet(); save();
+}
+function buyMonthly() {
+  const a = accLoad(); a.monthlyUntil = Math.max(now(), a.monthlyUntil || 0) + MONTHLY.days * 864e5; a.monthlyDay = new Date().toDateString(); accSave(a);
+  S.inji += MONTHLY.now; SFX.play('coin'); toast(`월간 사무지원 · 인지 ${MONTHLY.now} · ${MONTHLY.days}일간 매일 ${MONTHLY.daily} (테스트)`, 4000); refreshSheet(); save();
+}
+// 월간 사무지원: 하루 한 번, 그날 처음 플레이하는 슬롯에 지급
+function monthlyTick() {
+  if (!S.major) return; const a = accLoad(); if (!(a.monthlyUntil > now())) return;
+  const d = new Date().toDateString(); if (a.monthlyDay === d) return;
+  a.monthlyDay = d; accSave(a); S.inji += MONTHLY.daily; toast(`월간 사무지원 · 오늘의 인지 +${MONTHLY.daily}`, 3500); save();
+}
+function injiCard() {
+  const a = accLoad(), packs = a.packs || {}, left = a.monthlyUntil > now() ? Math.ceil((a.monthlyUntil - now()) / 864e5) : 0;
+  return `<div class="card" id="inji-shop"><div class="row between"><h3>인지 충전</h3><b style="color:var(--hl)">보유 ${fmt(S.inji)}</b></div>
+    <p class="note">뽑기 · 비급 · 이직 신청서 · AI 법률비서 · 경험치 부스터에 써요. 상품마다 <b>첫 구매는 2배</b>.</p>
+    <div class="row between"><span><b>월간 사무지원</b> <span class="note" style="color:var(--exp)">가장 이득</span><br><span class="note">즉시 인지 ${MONTHLY.now} + ${MONTHLY.days}일간 매일 ${MONTHLY.daily} (총 ${fmt(MONTHLY.now + MONTHLY.daily * MONTHLY.days)})${left ? ` · <b style="color:var(--exp)">${left}일 남음</b>` : ''}</span></span><button class="btn sm red" data-act="monthly">${won(MONTHLY.price)}</button></div>
+    ${INJI_PACKS.map((p) => `<div class="row between"><span><b>인지 ${fmt(p.inji)}</b>${p.bonus ? ` <span class="note">+${fmt(p.bonus)} 보너스</span>` : ''}${packs[p.id] ? '' : ' <span class="note" style="color:var(--stamp)">첫 구매 2배</span>'}</span><button class="btn sm" data-pack="${p.id}">${won(p.price)}</button></div>`).join('')}
+    <div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div></div>`;
+}
+const toCharge = () => setTimeout(() => { const el = $('#inji-shop'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 60);
 function storeCard() {
   return `<div class="card ${fullGame() ? '' : 'hot'}"><div class="row between"><h3>정식판 · 영구 구매</h3><button class="btn ghost sm" data-act="restore">구매 복원</button></div>
-    <p class="note">한 번 사면 영구. 모든 슬롯에 적용되고, 앱을 지웠다 깔거나 폰을 바꿔도 「구매 복원」으로 돌아옵니다. 인지와 뽑기는 돈으로 팔지 않아요. 게임 안에서만 법니다.</p>
+    <p class="note">한 번 사면 영구. 모든 슬롯에 적용되고, 앱을 지웠다 깔거나 폰을 바꿔도 「구매 복원」으로 돌아옵니다. 인지는 아래 「인지 충전」에서.</p>
     ${STORE.filter(storeVisible).map((p) => `<div class="row between"><span><b>${esc(p.name)}</b>${p.id === 'full' && !fullGame() ? ' <span class="note" style="color:var(--stamp)">3장부터</span>' : ''}<br><span class="note">${esc(p.d)}</span></span>${owns(p.id) ? '<span class="note" style="color:var(--exp);flex:none">보유</span>' : `<button class="btn sm ${p.id === 'full' || p.all ? 'red' : ''}" data-own="${p.id}">${won(p.price)}</button>`}</div>`).join('')}
     <div class="banner-test"><b>테스트 모드</b> · 실제 결제가 일어나지 않습니다. 누르면 바로 지급됩니다.</div></div>`;
 }
@@ -1077,11 +1111,12 @@ function shopTab() {
   return `${fullGame() ? '' : storeCard()}
   <div class="card"><h3>서초 백화점 · 장비 뽑기 <span class="note">뽑기 Lv.${lv}</span></h3>
     <p>확률 (Lv.${lv}): ${gachaRates(lv).map((r, i) => `<span class="gc${i}">${GRADES[i]} ${r.toFixed(1)}%</span>`).join(' · ')}.</p>
-    <div class="row wrap"><button class="btn sm" data-gacha="1" ${S.inji >= 60 ? '' : 'disabled'}>1회 · 인지 60</button><button class="btn red sm" data-gacha="11" ${S.inji >= 600 ? '' : 'disabled'}>11회 · 인지 600</button>${S.contracts ? `<button class="btn ghost sm" data-gacha="c">계약서로 1회 (${S.contracts})</button>` : ''}</div></div>
+    <div class="row wrap"><button class="btn sm" data-gacha="1" ${S.inji >= 60 ? '' : 'disabled'}>1회 · 인지 60</button><button class="btn red sm" data-gacha="11" ${S.inji >= 600 ? '' : 'disabled'}>11회 · 인지 600</button>${S.inji < 600 ? '<button class="btn ghost sm" data-act="tocharge">인지 충전</button>' : ''}${S.contracts ? `<button class="btn ghost sm" data-gacha="c">계약서로 1회 (${S.contracts})</button>` : ''}</div></div>
   <div class="card"><h3>코스튬 뽑기 <span class="note">수집 ${owned}/${Object.keys(COSMETICS).length}</span></h3>
     <div class="cosrow">${Object.entries(COSMETICS).map(([id, cc]) => `<span class="cosic ${S.inv.some((x) => x.cos === id) ? '' : 'no'}" title="${esc(cc.name)}" style="${iconStyle('cos', cc.i)}"></span>`).join('')}</div>
     <p>인지로 뽑는다(인지는 게임 안에서만 번다). 모자·등 장식. 입으면 모습이 바뀌고, <b>모으기만 해도</b> 수집 효과(능력치)가 쌓입니다. 12종 완성 시 세트 효과. 확률: 고급 55% · 희귀 33% · 영웅 10% · 전설 2%. 중복이면 인지 30 환급.</p>
-    <div class="row wrap"><button class="btn sm" data-cosg="1" ${S.inji >= 120 || S.cosTickets ? '' : 'disabled'}>${S.cosTickets ? `뽑기권 1회 (${S.cosTickets})` : '1회 · 인지 120'}</button><button class="btn red sm" data-cosg="10" ${S.inji >= 1100 ? '' : 'disabled'}>10회 · 인지 1,100</button></div></div>
+    <div class="row wrap"><button class="btn sm" data-cosg="1" ${S.inji >= 120 || S.cosTickets ? '' : 'disabled'}>${S.cosTickets ? `뽑기권 1회 (${S.cosTickets})` : '1회 · 인지 120'}</button><button class="btn red sm" data-cosg="10" ${S.inji >= 1100 ? '' : 'disabled'}>10회 · 인지 1,100</button>${S.inji < 1100 ? '<button class="btn ghost sm" data-act="tocharge">인지 충전</button>' : ''}</div></div>
+  ${injiCard()}
   ${scene === 'town' ? `<div class="card"><h3>김밥집</h3><div class="grid">${Object.entries(CONSUMABLES).map(([id, cc]) => `<div class="slot" data-buyc="${id}" title="${esc(cc.d)}"><div class="ic" style="${iconStyle('loot', cc.icon)}"></div><span class="n">₩${fmt(cc.price(c))}</span></div>`).join('')}</div><p>탭해서 구매 (수임료).</p></div>` : '<p class="note">김밥집은 마을에서 이용할 수 있습니다.</p>'}
   <div class="card"><h3>성장 상점</h3>
     <div class="row between"><span><b>경험치 부스터</b><br><span class="note">30분간 경험치 2배 · 보유 ${S.boosters}</span></span><button class="btn sm" data-act="buyboost" ${S.inji >= 150 ? '' : 'disabled'}>인지 150</button></div>
@@ -1317,6 +1352,7 @@ function onSheetClick(ev) {
   if (d.res) { if (S.resume.length < resumeSlots() && !S.resume.includes(d.res)) { S.resume.push(d.res); statCache = null; SFX.play('coin'); } updateBadges(); refreshSheet(); return; }
   if (d.unres) { S.resume = S.resume.filter((x) => x !== d.unres); statCache = null; updateBadges(); refreshSheet(); return; }
   if (d.own) { purchase(d.own); return; }
+  if (d.pack) { buyInji(d.pack); return; }
   if (d.bbook) { const cost = d.bbook === 'b2' ? 300 : 800; if (S.inji < cost) return; S.inji -= cost; S.books[d.bbook]++; toast(`${BOOKS[d.bbook].name} 구매`); SFX.play('coin'); refreshSheet(); return; }
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
@@ -1346,6 +1382,8 @@ function onSheetClick(ev) {
   else if (a === 'dropout2') expel(true);
   else if (a === 'surv') { closeSheet(); enterSurvival(); }
   else if (a === 'restore') restorePurchases();
+  else if (a === 'monthly') buyMonthly();
+  else if (a === 'tocharge') toCharge();
   else if (a === 'bugsend') { const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
   else if (a === 'savefile') exportSave();
   else if (a === 'openext') openExternal();
@@ -1426,7 +1464,7 @@ function showTitle() {
     const b = ev.target.closest('button'); if (!b) return;
     SFX.init(); BGM.ensure();
     if (b.dataset.slotNew) { SLOT = +b.dataset.slotNew; S = newState(); t.classList.remove('show'); chooseMajor(); }
-    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); }
+    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); monthlyTick(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); }
     else if (b.dataset.slotDel) { const n = +b.dataset.slotDel; if (slotArm === n) { deleteSlot(n); slotArm = 0; } else { slotArm = n; setTimeout(() => { if (slotArm === n && scene === 'title') { slotArm = 0; showTitle(); } }, 3000); } showTitle(); }
     else if (b.id === 't-ends') endingGallery();
     else if (b.id === 't-ext') openExternal();
@@ -1514,6 +1552,7 @@ function init() {
   });
   $('#qtrack').addEventListener('click', () => { if (player && !dialog.active) openMenu('quest'); });
   $('#b-menu').addEventListener('click', () => { if (!player) return; openMenu(); });
+  $('.cur.inji').addEventListener('click', () => { if (!player || dialog.active) return; openMenu('shop'); toCharge(); });   // 인지 표시를 누르면 충전으로
   // 사건 중 마을 귀환: 두 번 눌러 확정 (얻은 보상은 그대로)
   $('#b-home').addEventListener('click', () => { if (homeArm && now() - homeArm < 2500) { homeArm = 0; returnTown(); } else { homeArm = now(); $('#b-home').textContent = '귀환?'; $('#b-home').classList.add('warn'); setTimeout(() => { if (homeArm && now() - homeArm >= 2400) { homeArm = 0; } $('#b-home').textContent = '귀환'; $('#b-home').classList.remove('warn'); }, 2500); } });
   $('#b-auto').addEventListener('click', () => {
@@ -1525,7 +1564,7 @@ function init() {
   const unlockAudio = () => { if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); }; window.addEventListener('pointerdown', unlockAudio); window.addEventListener('keydown', unlockAudio);
   window.addEventListener('resize', layout); window.addEventListener('orientationchange', () => setTimeout(layout, 200));
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
-  setInterval(() => { if (S.major) save(); }, 10000);
+  setInterval(() => { if (S.major) { save(); monthlyTick(); } }, 10000);
   layout();
   $('#b-hp').insertAdjacentHTML('afterbegin', `<span class="ic" style="${iconStyle('loot', LOOT.gimbap)};width:26px;height:26px;background-size:400% 300%;display:block"></span>`);
   loadAssets((f) => { const el = $('#loading'); if (el) el.textContent = `사건 기록을 불러오는 중… ${Math.round(f * 100)}%`; }).then(() => {
@@ -1543,7 +1582,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, packSaves, importMigration,
+  transferJob, fixJobQuests, reqOk, refreshSheet, trialSheet, purchase, owns, applyOwned, grandfather, makeLegend, autoEquipIfBetter, damageMob, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});
