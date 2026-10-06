@@ -14,7 +14,7 @@ function reqOk(r, soft = false) {
   if (soft) return true;
   if (r.lv && S.lv < r.lv) return false;
   if (r.tier != null && !S.jobs.some((j) => JOBS[j].tier >= r.tier)) return false;
-  if (r.jobs && !r.jobs.includes(S.job)) return false;   // 승진·히든 퀘스트는 「지금 직업」 기준 (이직해도 예전 직업 퀘스트가 열리지 않게)
+  if (r.jobs && !r.jobs.some((j) => j === S.job || HIDDEN_OF[j] === S.job)) return false;   // 승진·히든 퀘스트는 「지금 직업」(또는 거기서 오른 히든 직업) 기준 — 이직해도 예전 직업 퀘스트가 열리지 않게
   if (r.client && clientDone() < r.client) return false;
   if (r.trivia && S.trivia.length < r.trivia) return false;
   if (r.path === 'law' && S.dropout) return false;
@@ -27,7 +27,7 @@ function reqWhy(r) {
   const out = [];
   if (r.lv && S.lv < r.lv) out.push(`Lv.${r.lv}`);
   if (r.tier != null && !S.jobs.some((j) => JOBS[j].tier >= r.tier)) out.push(r.tier >= 2 ? '2차 직업' : '로스쿨생');
-  if (r.jobs && !r.jobs.includes(S.job)) out.push('현재 직업 ' + r.jobs.map((j) => JOBS[j].name).join('/'));
+  if (r.jobs && !r.jobs.some((j) => j === S.job || HIDDEN_OF[j] === S.job)) out.push('현재 직업 ' + r.jobs.map((j) => JOBS[j].name).join('/'));
   if (r.client && clientDone() < r.client) out.push(`의뢰인 퀘스트 ${clientDone()}/${r.client}`);
   if (r.trivia && S.trivia.length < r.trivia) out.push(`법률 상식 카드 ${S.trivia.length}/${r.trivia}`);
   if (r.path === 'law' && S.dropout) out.push('로스쿨 재학생만');
@@ -110,7 +110,9 @@ function giveRewards(r) {
   if (r.skill) { S.skl[r.skill] = Math.max(1, S.skl[r.skill] || 0); ensureLoadout(); out.push(`스킬 「${SKILLS[r.skill].name}」`); showBanner('새 스킬', SKILLS[r.skill].name); }
   if (r.job) { addJob(r.job); changeJob(r.job); }
   if (r.unlock) { addJob(r.unlock); out.push(`직업: ${JOBS[r.unlock].name}`); if (job().tier < JOBS[r.unlock].tier) changeJob(r.unlock); else checkPassives(); if (JOBS[r.unlock].tier === 2) for (const id of ['j2a', 'j2b', 'j2c']) if (qState(id) === 'active') delete S.q[id]; }
-  if (r.rank) { S.rank[r.rank] = 1; checkPassives(); if (S.job !== r.rank) changeJob(r.rank); else { statCache = null; showBanner(`3차 전직 · ${jobName()}`, `각성 궁극기 「${SKILLS[ultId()].name}」`); BGM.jingle('job'); } out.push(`승진: ${jobName(r.rank)}`); }
+  if (r.rank) { S.rank[r.rank] = 1; checkPassives();
+    if (S.job !== r.rank && JOBS[S.job].tier > JOBS[r.rank].tier) { statCache = null; toast(`${esc(jobName(r.rank))} 경력 인정 · 승진 패시브는 이력서에 꽂을 수 있어요`, 4000); }   // 히든 직업이 된 뒤 끝낸 승진: 직업은 그대로 (내려가지 않는다)
+    else if (S.job !== r.rank) changeJob(r.rank); else { statCache = null; showBanner(`3차 전직 · ${jobName()}`, `각성 궁극기 「${SKILLS[ultId()].name}」`); BGM.jingle('job'); } out.push(`승진: ${jobName(r.rank)}`); }
   if (r.comp) { if (!S.comps.includes(r.comp)) S.comps.push(r.comp); if (S.party.length < S.slots && !S.party.includes(r.comp)) S.party.push(r.comp); out.push(`동료 ${COMPANIONS[r.comp].name}`); if (W && W.kind === 'stage') buildAllies(); }
   if (r.slots) { S.slots = Math.max(S.slots, r.slots); for (const c of S.comps) if (S.party.length < S.slots && !S.party.includes(c)) S.party.push(c); if (W && W.kind === 'stage') buildAllies(); }
   if (r.title && !S.titles.includes(r.title)) { S.titles.push(r.title); out.push(`칭호 「${r.title}」`); }
