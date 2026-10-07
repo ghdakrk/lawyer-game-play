@@ -544,7 +544,7 @@ function drawPlayer() {
   if (p.dead) rot = -1.3 * p.face;
   let lunge = 0; if (p.atkT > 0 && !pose.loco && fi === HF.strike) lunge = p.face * 3;
   const glowC = buff('invuln') ? '#fff3a0' : buff('cram') || buff('energy') ? '#ffe45c' : p.evid >= 5 ? '#ff6b5c' : null;
-  drawFigure(pose, p.x + lunge, p.y + oy, 64, p.face, { sx, sy, rot, glow: glowC, aura: true, t: p.animT });
+  drawFigure(pose, p.x + lunge, p.y + oy, 64, p.face, { sx, sy, rot, glow: glowC, aura: true, t: p.animT, vel: [p.vx, p.vy, p.onGround] });
   if (!p.dead) drawMech(p);
 }
 // 걷기·밧줄은 전용 시트, 나머지는 기본 8프레임
@@ -564,14 +564,14 @@ function drawMech(p) {
   else if (mech === 'card') drawText(`₩${fmt(S.gold)}`, p.x, y - 2, 8, '#ffd24d');
 }
 const poseOf = (id, fi = 0) => ({ an: JOBS[id].anim[0], key: JOBS[id].anim[1], fi });
-// 주인공 그리기: 오라 → 등 장식 → 몸 → 머리 장식 (뒷모습이면 등 장식이 몸 위)
+// 주인공 그리기: 오라 → 몸 뒤 코스튬(망토 몸판·날개·가발 뒷머리) → 몸 → 몸 앞 코스튬(모자·가발·망토 깃)
 function drawFigure(pose, x, y, h, face, o = {}) {
   const t = o.t || performance.now() / 1000;
   if (o.aura) drawAura(x, y, h, t);
-  if (!o.rot && !pose.back) drawCos('back', pose, x, y, h, face, t);
+  const cos = !o.rot && (S.equip.head || S.equip.back);
+  if (cos) drawCos('under', pose, x, y, h, face, t, o);
   drawAnim(pose.an, pose.key, pose.fi, x, y, h, { flip: face < 0, sx: o.sx, sy: o.sy, rot: o.rot, glow: o.glow });
-  if (!o.rot && pose.back) drawCos('back', pose, x, y, h, face, t);
-  if (!o.rot) drawCos('head', pose, x, y, h, face, t);
+  if (cos) drawCos('over', pose, x, y, h, face, t, o);
 }
 function bestGrade() { let g = -1; for (const k of ['weapon', 'armor', 'acc', 'gear']) { const it = S.inv.find((x) => x.uid === S.equip[k]); if (it) g = Math.max(g, it.grade + Math.floor((it.en || 0) / 5)); } return Math.min(4, g); }
 function drawAura(x, y, h, t) {
@@ -585,32 +585,174 @@ function drawAura(x, y, h, t) {
   if (g >= 3) for (let i = 0; i < (g === 4 ? 5 : 3); i++) { const a = t * 1.6 + i * 2.1; const px = x + Math.cos(a) * h * 0.35, py = y - h * 0.15 - ((t * 30 + i * 17) % (h * 0.9)); ctx.globalAlpha = 0.8; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(px, py, 1.6, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
-function drawCos(slot, pose, x, y, h, face, t) {
-  const it = S.inv.find((v) => v.uid === S.equip[slot]); if (!it || !it.cos) return;
-  const c = COSMETICS[it.cos]; const img = A.cosmetics; if (!img) return;
-  const an = HEAD[`${pose.an}/${pose.key}`]; const meta = ATLAS[pose.an].frames[pose.key]; if (!an) return;
-  const k = h / meta.bh; const [cx, top, hw0] = an[clamp(pose.fi, 0, an.length - 1)];
-  const flip = face < 0 ? -1 : 1;
-  const hx = x + flip * (cx - meta.cw / 2) * k, hy = y - (meta.ch - 3) * k + top * k, hw = clamp(hw0, 60, 96) * k;
-  const [iw, ih] = COS_ATLAS.sizes[c.i]; const sx0 = (c.i % 4) * COS_ATLAS.cw + (COS_ATLAS.cw - iw) / 2, sy0 = Math.floor(c.i / 4) * COS_ATLAS.ch + (COS_ATLAS.ch - ih) / 2;
-  const dw = hw * c.sc, dh = dw * ih / iw;
-  ctx.save();
-  if (slot === 'head') {
-    const by = c.float ? hy + hw * 0.1 + Math.sin(t * 3) * 1 : hy + c.dy * hw;   // 모자는 머리에 맞게 눌러 쓰고, 천사 링만 살짝 뜬다
-    ctx.translate(hx + (pose.back ? 0 : flip * (c.dx || 0) * hw), by); ctx.scale(flip, 1);
-    if (c.float) { ctx.globalCompositeOperation = 'lighter'; }
-    ctx.drawImage(img, sx0, sy0, iw, ih, -dw / 2, -dh, dw, dh);
-  } else {
-    const bx = hx + (pose.back ? 0 : flip * c.ox * hw), by = hy + c.oy * hw + (c.float ? Math.sin(t * 2.4) * 2 : 0);
-    ctx.translate(bx, by); ctx.scale(flip * (c.flap ? 1 + Math.sin(t * 9) * 0.07 : 1), 1);
-    if (c.float) { ctx.globalAlpha = 0.9; ctx.globalCompositeOperation = 'lighter'; }
-    ctx.drawImage(img, sx0, sy0, iw, ih, -dw / 2, -dh / 2, dw, dh);
-  }
-  ctx.restore();
+// ---------- 코스튬: 머리·얼굴 위치에 맞춰 씌운다 ----------
+// 프레임마다 그림에서 잰 머리 기하(HEADG). 좌표 = 원본 픽셀, 원점 = 머리 위 가운데, +x = 얼굴 쪽
+function headGeo(pose) {
+  const key = `${pose.an}/${pose.key}`, meta = ATLAS[pose.an] && ATLAS[pose.an].frames[pose.key]; if (!meta) return null;
+  const G = HEADG[key], g = G && G[clamp(pose.fi, 0, G.length - 1)];
+  if (g) { const [X, T, U, fl, ft, fr, fb] = g; return { X, T, U, fl: fl - X, ft: ft - T, fr: fr - X, fb: fb - T, back: !!pose.back, meta }; }
+  const A0 = HEAD[key]; if (!A0) return null; const [cx, top, hw] = A0[clamp(pose.fi, 0, A0.length - 1)];
+  const U = hw * 1.05; return { X: cx, T: top, U, fl: -U * 0.32, ft: U * 0.42, fr: U * 0.32, fb: U * 0.84, back: true, meta };
 }
-function heroPreview(id = S.job, w = 120, hgt = 140) {
+// 망토·술이 움직임을 따라 늦게 따라온다 (주인공 하나만)
+const cloth = { a: 0, va: 0, l: 0, vl: 0, at: 0 };
+function clothState(o, face, t) {
+  const idle = Math.sin(t * 1.7) * 0.06 + 0.06;
+  if (!o.vel) return { a: idle, l: 0 };
+  const tn = performance.now() / 1000, dt = clamp(tn - (cloth.at || tn), 0, 0.05); cloth.at = tn;
+  const [vx, vy, ground] = o.vel, fwd = vx * face;
+  const ta = idle + clamp(fwd / 240, -0.3, 1) * 0.8, tl = ground ? 0 : clamp(vy / 420, -0.6, 1);
+  cloth.va += ((ta - cloth.a) * 70 - cloth.va * 10) * dt; cloth.a += cloth.va * dt;
+  cloth.vl += ((tl - cloth.l) * 55 - cloth.vl * 9) * dt; cloth.l += cloth.vl * dt;
+  return cloth;
+}
+function drawCos(layer, pose, x, y, h, face, t, o = {}) {
+  const g = headGeo(pose); if (!g) return;
+  const k = h / g.meta.bh, flip = face < 0 ? -1 : 1, cl = clothState(o, face, t);
+  for (const slot of ['back', 'head']) {
+    const it = S.equip[slot] && S.inv.find((v) => v.uid === S.equip[slot]); if (!it || !it.cos) continue;
+    const c = COSMETICS[it.cos]; if (!c) continue;
+    ctx.save();
+    ctx.translate(x, y); ctx.scale(o.sx || 1, o.sy || 1);   // 착지할 때 찌그러짐도 따라간다
+    ctx.translate(flip * (g.X - g.meta.cw / 2) * k, (g.T - (g.meta.ch - 3)) * k); ctx.scale(flip * k, k);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (c.proc === 'cape') drawCape(g, layer, cl, t);
+    else if (c.proc === 'wig') drawWig(g, layer, cl, t);
+    else if (c.proc === 'phones') { if (layer === 'over') drawPhones(g); }
+    else if (slot === 'head') { if (layer === 'over') drawHat(c, g, cl, t); }
+    else if (layer === (g.back && !c.float ? 'over' : 'under')) drawBackItem(c, g, t);
+    ctx.restore();
+  }
+}
+function cosImg(c, x, y, w, ax, ay) {   // 아이콘 그림을 (x, y)에 폭 w로. ax·ay = 그림 안의 기준점 (0~1)
+  const img = A.cosmetics; if (!img) return;
+  const [iw, ih] = COS_ATLAS.sizes[c.i]; const sx0 = (c.i % 4) * COS_ATLAS.cw + (COS_ATLAS.cw - iw) / 2, sy0 = Math.floor(c.i / 4) * COS_ATLAS.ch + (COS_ATLAS.ch - ih) / 2;
+  const hh = w * ih / iw; ctx.drawImage(img, sx0, sy0, iw, ih, x - w * ax, y - hh * ay, w, hh);
+}
+function drawHat(c, g, cl, t) {
+  const U = g.U, w = c.w * U;
+  let by = (c.ref === 'brow' ? g.ft : 0) + c.by * U;
+  if (c.float) by += Math.sin(t * 3) * 0.03 * U;
+  ctx.translate(c.x * U, by); if (c.rot && !g.back) ctx.rotate(c.rot);
+  if (!c.float) {   // 챙 밑 그림자: 모자가 머리에 얹힌 게 아니라 눌러 쓴 것처럼
+    ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(0, U * 0.03, w * 0.4, U * 0.05, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  if (c.float) ctx.globalCompositeOperation = 'lighter';
+  if (c.mirror && !g.back) ctx.scale(-1, 1);
+  cosImg(c, 0, 0, w, 0.5, c.seat);
+}
+function drawBackItem(c, g, t) {
+  const U = g.U, nY = g.fb + U * 0.05;
+  let x = g.back && !c.float ? 0 : c.x * U, y = nY + c.y * U;
+  if (c.float) y += Math.sin(t * 2.4) * 0.04 * U;
+  ctx.translate(x, y);
+  if (c.flap) ctx.scale(1 + Math.sin(t * 9) * 0.08, 1 - Math.sin(t * 9) * 0.03);
+  if (c.float) { ctx.globalAlpha = 0.92; ctx.globalCompositeOperation = 'lighter'; }
+  cosImg(c, 0, 0, c.w * U, 0.5, 0.5);
+}
+// 영웅 망토: 어깨에 매달려 움직임 반대로 휘날린다. 몸 뒤에 몸판, 몸 앞에 깃·브로치
+function drawCape(g, layer, cl, t) {
+  const U = g.U, nY = g.fb + U * 0.04, feet = g.meta.ch - 3 - g.T, L = Math.max(U * 0.8, (feet - nY) * 0.8);
+  const RED = '#cf2632', DEEP = '#7a0f1a', LINE = '#2c080d', GOLD = '#f2c14e';
+  const fillCape = (y0, y1) => { const gr = ctx.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, RED); gr.addColorStop(1, DEEP); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = LINE; ctx.lineWidth = 2.6; ctx.stroke(); };
+  if (g.back) {   // 뒷모습(밧줄): 등 전체를 덮고 아래로 늘어진다
+    if (layer !== 'over') return;
+    const sw = Math.sin(t * 2.2) * 0.05 * U, y0 = nY + U * 0.02, y1 = nY + L * 0.9;
+    ctx.beginPath(); ctx.moveTo(-0.36 * U, y0); ctx.quadraticCurveTo(0, y0 - 0.06 * U, 0.36 * U, y0);
+    ctx.quadraticCurveTo(0.48 * U, (y0 + y1) / 2, 0.5 * U + sw, y1);
+    for (let i = 1; i <= 4; i++) { const xa = 0.5 * U - i * 0.25 * U + sw; ctx.quadraticCurveTo(xa + 0.125 * U, y1 + (i % 2 ? 0.07 : -0.03) * U, xa, y1); }
+    ctx.quadraticCurveTo(-0.48 * U, (y0 + y1) / 2, -0.36 * U, y0); ctx.closePath(); fillCape(y0, y1);
+    ctx.strokeStyle = 'rgba(40,0,8,.35)'; ctx.lineWidth = 2; for (const fx of [-0.15, 0.12]) { ctx.beginPath(); ctx.moveTo(fx * U, y0 + 0.1 * U); ctx.quadraticCurveTo(fx * 1.6 * U, (y0 + y1) / 2, fx * 1.9 * U + sw, y1 - 0.04 * U); ctx.stroke(); }
+    return;
+  }
+  const sb = [-0.36 * U, nY + 0.03 * U], sf = [0.02 * U, nY + 0.06 * U];
+  if (layer === 'over') {   // 깃: 목 둘레에 짧게 + 금 브로치
+    ctx.beginPath(); ctx.moveTo(-0.26 * U, nY - 0.01 * U); ctx.quadraticCurveTo(-0.1 * U, nY + 0.07 * U, 0.03 * U, nY + 0.04 * U);
+    ctx.strokeStyle = LINE; ctx.lineWidth = 0.075 * U; ctx.stroke(); ctx.strokeStyle = RED; ctx.lineWidth = 0.045 * U; ctx.stroke();
+    const bx = 0.04 * U, byy = nY + 0.04 * U, r = 0.042 * U;
+    ctx.beginPath(); ctx.arc(bx, byy, r, 0, Math.PI * 2); ctx.fillStyle = GOLD; ctx.fill(); ctx.strokeStyle = LINE; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx - r * 0.3, byy - r * 0.3, r * 0.35, 0, Math.PI * 2); ctx.fillStyle = '#fff6c8'; ctx.fill();
+    return;
+  }
+  const a = clamp(cl.a, -0.25, 1.15), lift = cl.l, sw = Math.sin(t * 2.3) * 0.035;
+  const th = a * 0.95 + Math.max(0, lift) * 0.5 + sw, Lb = L * (1 - Math.max(0, lift) * 0.22 + Math.max(0, -lift) * 0.06);
+  const hb = [sb[0] - Math.sin(th) * Lb - 0.3 * U, sb[1] + Math.cos(th) * Lb * 0.97];
+  const hf = [sf[0] - 0.12 * U - Math.sin(th * 0.6) * Lb * 0.95, sf[1] + Math.cos(th * 0.6) * Lb * 0.9];
+  const hem = () => {   // 물결치는 밑단 (hf → hb)
+    const n = 4, amp = 0.045 * U * (1 + a * 0.8);
+    for (let i = 1; i <= n; i++) {
+      const p0 = [hf[0] + (hb[0] - hf[0]) * (i - 0.5) / n, hf[1] + (hb[1] - hf[1]) * (i - 0.5) / n], p1 = [hf[0] + (hb[0] - hf[0]) * i / n, hf[1] + (hb[1] - hf[1]) * i / n];
+      const wv = Math.sin(t * 6 + i * 1.7) * amp; ctx.quadraticCurveTo(p0[0], p0[1] + amp + wv, p1[0], p1[1]);
+    }
+  };
+  const bulge = [(hb[0] + sb[0]) / 2 - (0.2 + 0.1 * a) * U, sb[1] + (hb[1] - sb[1]) * 0.35];
+  ctx.beginPath(); ctx.moveTo(sf[0], sf[1]); ctx.quadraticCurveTo(sf[0] - 0.02 * U, (sf[1] + hf[1]) / 2, hf[0], hf[1]);
+  hem(); ctx.quadraticCurveTo(bulge[0], bulge[1], sb[0], sb[1]); ctx.quadraticCurveTo(-0.07 * U, nY - 0.03 * U, sf[0], sf[1]); ctx.closePath();
+  fillCape(nY, Math.max(hb[1], hf[1]));
+  // 안감이 보이는 뒷자락 + 밑단 금실
+  ctx.save(); ctx.clip();
+  ctx.beginPath(); ctx.moveTo(sb[0], sb[1]); ctx.quadraticCurveTo(bulge[0], bulge[1], hb[0], hb[1]); ctx.lineTo(hb[0] + 0.14 * U, hb[1] - 0.04 * U); ctx.quadraticCurveTo(bulge[0] + 0.16 * U, bulge[1], sb[0] + 0.08 * U, sb[1]); ctx.closePath();
+  ctx.fillStyle = 'rgba(45,4,12,.55)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(40,0,8,.38)'; ctx.lineWidth = 2;
+  for (const f of [0.35, 0.65]) { const top = [sb[0] + (sf[0] - sb[0]) * f, sb[1] + (sf[1] - sb[1]) * f], bot = [hb[0] + (hf[0] - hb[0]) * f, hb[1] + (hf[1] - hb[1]) * f]; ctx.beginPath(); ctx.moveTo(top[0], top[1] + 0.06 * U); ctx.quadraticCurveTo((top[0] + bot[0]) / 2 - 0.06 * U, (top[1] + bot[1]) / 2, bot[0], bot[1]); ctx.stroke(); }
+  ctx.restore();
+  ctx.beginPath(); ctx.moveTo(hf[0], hf[1]); hem(); ctx.strokeStyle = GOLD; ctx.lineWidth = 2.2; ctx.stroke();
+}
+// 고양이 헤드폰: 머리 위 띠 + 고양이 귀, 보이는 쪽 귀에 컵 하나 (반대쪽은 머리 뒤)
+function drawPhones(g) {
+  const U = g.U, PK = '#ff8fbf', PD = '#e0628f', OL = '#3a2430', earY = g.back ? 0.62 * U : g.ft + (g.fb - g.ft) * 0.45, earX = g.back ? -0.5 * U : Math.max(-0.5 * U, g.fl - 0.02 * U);
+  const ear = (cx, rot) => { ctx.save(); ctx.translate(cx, -0.02 * U); ctx.rotate(rot); ctx.beginPath(); ctx.moveTo(-0.12 * U, 0.06 * U); ctx.lineTo(0, -0.2 * U); ctx.lineTo(0.12 * U, 0.06 * U); ctx.closePath(); ctx.fillStyle = PK; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-0.06 * U, 0.03 * U); ctx.lineTo(0, -0.11 * U); ctx.lineTo(0.06 * U, 0.03 * U); ctx.closePath(); ctx.fillStyle = '#ffd3e6'; ctx.fill(); ctx.restore(); };
+  ear(-0.26 * U, -0.35); ear(0.2 * U, 0.3);
+  ctx.beginPath(); ctx.moveTo(earX, earY - 0.08 * U); ctx.bezierCurveTo(-0.62 * U, -0.2 * U, 0.5 * U, -0.22 * U, 0.46 * U, 0.3 * U);   // 머리 위 띠
+  ctx.strokeStyle = OL; ctx.lineWidth = 0.11 * U; ctx.stroke(); ctx.strokeStyle = PK; ctx.lineWidth = 0.07 * U; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(earX, earY, 0.15 * U, 0.2 * U, 0, 0, Math.PI * 2); ctx.fillStyle = PK; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.4; ctx.stroke();   // 컵
+  ctx.beginPath(); ctx.ellipse(earX - 0.02 * U, earY, 0.1 * U, 0.14 * U, 0, 0, Math.PI * 2); ctx.fillStyle = PD; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(earX - 0.02 * U, earY + 0.03 * U, 0.035 * U, 0, Math.PI * 2); ctx.fill();   // 발바닥 무늬
+  for (const [dx, dy] of [[-0.05, -0.04], [0, -0.06], [0.05, -0.04]]) { ctx.beginPath(); ctx.arc(earX - 0.02 * U + dx * U, earY + dy * U, 0.016 * U, 0, Math.PI * 2); ctx.fill(); }
+}
+// 법정 가발 (아이콘 그림체): 소용돌이 결의 정수리가 머리카락을 덮고, 귀 옆에 끝이 보이는 원통 컬 세 줄, 목 뒤 갈고리 꼬리
+function drawWig(g, layer, cl, t) {
+  const U = g.U, W0 = '#f7f3ef', W1 = '#e2dad5', W2 = '#b9aeaa', W3 = '#8f8582', OL = '#3d3638';
+  const sway = Math.sin(t * 2) * 0.07 + clamp(cl.a, -0.2, 1) * 0.5;
+  const roll = (x0, x1, yc, hh) => {   // 원통 컬: 몸통 + 앞쪽 끝 단면(구멍)
+    const r = hh / 2; ctx.beginPath(); ctx.moveTo(x1, yc - r); ctx.lineTo(x0 + r * 0.6, yc - r); ctx.ellipse(x0 + r * 0.6, yc, r * 0.6, r, 0, -Math.PI / 2, Math.PI / 2, true); ctx.lineTo(x1, yc + r); ctx.closePath();
+    const gr = ctx.createLinearGradient(0, yc - r, 0, yc + r); gr.addColorStop(0, W0); gr.addColorStop(0.5, W1); gr.addColorStop(1, W2); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,105,100,.55)'; ctx.lineWidth = 1.3;   // 감긴 결
+    for (let k = 1; k <= 2; k++) { const xx = x0 + (x1 - x0) * k / 3; ctx.beginPath(); ctx.moveTo(xx, yc - r * 0.85); ctx.quadraticCurveTo(xx - r * 0.35, yc, xx, yc + r * 0.85); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(x1, yc, r * 0.55, r, 0, 0, Math.PI * 2); ctx.fillStyle = W0; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x1 + r * 0.05, yc + r * 0.05, r * 0.26, r * 0.5, 0, 0, Math.PI * 2); ctx.fillStyle = W3; ctx.fill();
+  };
+  if (layer === 'under') {   // 목 뒤 갈고리 꼬리
+    if (g.back) return;
+    ctx.save(); ctx.translate(-0.46 * U, g.fb - 0.08 * U); ctx.rotate(sway);
+    const L = 0.36 * U, w = 0.12 * U;
+    ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.quadraticCurveTo(-w * 0.7, L * 0.6, -w * 0.1, L); ctx.quadraticCurveTo(w * 0.9, L * 1.05, w * 1.0, L * 0.78);
+    ctx.quadraticCurveTo(w * 0.45, L * 0.9, w * 0.2, L * 0.72); ctx.quadraticCurveTo(w * 0.45, L * 0.35, w / 2, 0); ctx.closePath();
+    ctx.fillStyle = W1; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    return;
+  }
+  const back = -0.64 * U, front = g.back ? 0.62 * U : Math.max(g.fr + 0.05 * U, 0.5 * U), brow = g.back ? 0.5 * U : g.ft + 0.01 * U, top = -0.15 * U;
+  // 정수리 덮개: 뒤로 빗어 넘긴 듯 볼록하게
+  ctx.beginPath(); ctx.moveTo(back + 0.02 * U, brow + 0.22 * U);
+  ctx.bezierCurveTo(back - 0.14 * U, top - 0.02 * U, front - 0.02 * U, top - 0.1 * U, front, brow);
+  ctx.quadraticCurveTo((front + back) / 2 + 0.12 * U, brow + 0.03 * U, back + 0.02 * U, brow + 0.22 * U); ctx.closePath();
+  const gr = ctx.createRadialGradient(0.05 * U, top + 0.14 * U, 0.04 * U, -0.1 * U, brow * 0.7, 0.8 * U); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, W0); gr.addColorStop(0.85, W1); gr.addColorStop(1, W2);
+  ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.6; ctx.stroke();
+  ctx.save(); ctx.clip(); ctx.lineWidth = 1.7;   // 결: 앞이마에서 뒤로 흘러가는 물결
+  for (let k = 0; k < 4; k++) { const y0 = top + (0.12 + k * 0.12) * U; ctx.strokeStyle = k % 2 ? 'rgba(160,145,140,.45)' : 'rgba(150,135,130,.6)'; ctx.beginPath(); ctx.moveTo(front + 0.02 * U, y0 + 0.1 * U); ctx.bezierCurveTo(0.15 * U, y0 - 0.06 * U, -0.2 * U, y0 + 0.12 * U, back - 0.05 * U, y0 + 0.02 * U); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(120,100,100,.18)'; ctx.beginPath(); ctx.ellipse(back + 0.1 * U, brow + 0.08 * U, 0.22 * U, 0.16 * U, 0, 0, Math.PI * 2); ctx.fill();   // 뒤 아래 그늘
+  ctx.restore();
+  if (g.back) { for (let r = 0; r < 3; r++) roll(-0.6 * U, 0.6 * U, brow + (0.04 + r * 0.15) * U, 0.16 * U); return; }
+  // 귀 옆 컬 세 줄 (뒤에서 앞으로, 끝 단면이 얼굴 쪽)
+  const x1 = Math.max(-0.34 * U, Math.min(-0.2 * U, g.fl + 0.04 * U));
+  roll(back - 0.04 * U, x1, brow + 0.1 * U, 0.17 * U);
+  roll(back - 0.06 * U, x1 - 0.02 * U, brow + 0.27 * U, 0.17 * U);
+  roll(back - 0.03 * U, x1 - 0.05 * U, brow + 0.44 * U, 0.16 * U);
+}
+function heroPreview(id = S.job, w = 120, hgt = 140, pose = poseOf(id), face = 1, t = 0) {
   const c = document.createElement('canvas'); c.width = w * 2; c.height = hgt * 2; const saved = ctx; ctx = c.getContext('2d'); ctx.scale(2, 2);
-  try { drawFigure(poseOf(id), w / 2, hgt - 6, hgt * 0.62, 1, { aura: id === S.job, t: 0 }); } catch (e) { /* 무시 */ }
+  try { drawFigure(pose, w / 2, hgt - 6, hgt * 0.62, face, { aura: id === S.job, t }); } catch (e) { /* 무시 */ }
   ctx = saved; return c.toDataURL();
 }
 function drawAlly(a) {
@@ -758,10 +900,21 @@ function updateCamera(dt) {
 // ======================================================================
 // HUD
 // ======================================================================
+// 경험치 2배: 남은 시간을 HUD에 보여 주고, 끝나면 알린다
+let boostWas = false;
+const mmss = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+function boostHud() {
+  const left = S.boostUntil - now(), on = left > 0, el = $('#h-boost');
+  if (el.hidden === on) { el.hidden = !on; $('.bar.exp').classList.toggle('boost', on); $('#app').classList.toggle('boosting', on); }
+  if (on) { const tx = mmss(left); if ($('#h-boostt').textContent !== tx) $('#h-boostt').textContent = tx; }
+  if (boostWas && !on && scene !== 'title') toast('경험치 2배가 끝났어요 · 가방에 부스터가 있으면 다시 켜세요', 3500);
+  boostWas = on;
+}
 function renderHud() {
   const st = stats(), p = player;
   $('#h-lv').textContent = `Lv.${S.lv}`;
-  const jn = `${jobName()} · ${RANGE[job().type].name}${S.boostUntil > now() ? ' · EXP×2' : ''}`; if ($('#h-job').textContent !== jn) $('#h-job').textContent = jn;
+  const jn = `${jobName()} · ${RANGE[job().type].name}`; if ($('#h-job').textContent !== jn) $('#h-job').textContent = jn;
+  boostHud();
   if (p) {
     $('#h-hp').style.width = `${clamp(p.hp / st.hp * 100, 0, 100)}%`; $('#h-hpt').textContent = `멘탈 ${fmt(Math.max(0, p.hp))}/${fmt(st.hp)}`;
     $('#h-mp').style.width = `${clamp(p.mp / st.mp * 100, 0, 100)}%`; $('#h-mpt').textContent = `커피 ${Math.floor(p.mp)}/${Math.floor(st.mp)}`;
@@ -1021,12 +1174,24 @@ function bagTab() {
     ${equipped || sel.cos ? '' : `<button class="btn ghost sm" data-act="sell">판매 ₩${fmt(sellPrice(sel))}</button>`}</div>${sel.cos ? '<p class="note">코스튬은 캐릭터 모습을 바꿉니다.</p>' : '<p class="note">강화 1단계당 능력치 +10%. +5부터는 실패하면 1단계 내려갑니다. 장비 등급·강화가 높으면 몸에 오라가 생깁니다.</p>'}</div>` : ''}
   <div class="card"><div class="row between"><h3>가방 <span class="note">${sorted.length}</span></h3><button class="btn ghost sm" data-act="sellall">일반·고급 일괄 판매</button></div>
     ${sorted.length ? `<div class="grid">${sorted.map((it) => `<div class="slot g${it.grade} ${selItem === it.uid ? 'sel' : ''}" data-item="${it.uid}">${icon(it)}${Object.values(S.equip).includes(it.uid) ? '<span class="k">E</span>' : ''}${it.en ? `<span class="n">+${it.en}</span>` : ''}</div>`).join('')}</div>` : '<p>장비가 없습니다.</p>'}</div>
-  <div class="card"><h3>소모품 · 재료</h3><div class="grid">${Object.entries(CONSUMABLES).map(([id, c]) => `<div class="slot" data-use="${id}" title="${esc(c.d)}"><div class="ic" style="${iconStyle('loot', c.icon)}"></div><span class="n">${S.cons[id] || 0}</span></div>`).join('')}
-    <div class="slot" title="헤드헌팅 계약서"><div class="ic" style="${iconStyle('loot', LOOT.contract)}"></div><span class="n">${S.contracts}</span></div>
-    <div class="slot g2" data-act="useboost" title="경험치 부스터"><div class="ic" style="${iconStyle('loot', LOOT.energy)}"></div><span class="k">부스터</span><span class="n">${S.boosters}</span></div>
-    ${['b1', 'b2', 'b3'].map((b) => `<div class="slot g${b === 'b1' ? 1 : b === 'b2' ? 2 : 3}" title="${BOOKS[b].name}"><div class="ic" style="${iconStyle('equip', 1)}"></div><span class="k">${BOOKS[b].name.split(' · ')[1]}</span><span class="n">${S.books[b] || 0}</span></div>`).join('')}
-    ${qi.map(([it, n]) => `<div class="slot" title="${esc(QITEMS[it].name)}"><div class="ic" style="${iconStyle(QITEMS[it].icon[0], QITEMS[it].icon[1])}"></div><span class="k">퀘스트</span><span class="n">${n}</span></div>`).join('')}</div>
-    <p>탭하면 사용합니다. 김밥 = 멘탈(Q), 믹스커피 = 커피(W), 부스터 = 30분간 경험치 2배.</p></div>`;
+  ${consCard()}`;
+}
+// 소모품·재료: 무엇에 쓰는지와 쓰는 법을 글로 보여 준다 (휴대폰엔 툴팁이 없다)
+function consCard() {
+  const inStage = scene === 'stage' && W && !W.ended;
+  const left = S.boostUntil - now();
+  const row = (ic, name, n, d, how, btn) => `<div class="citem"><div class="ic" style="${ic}"></div><div style="min-width:0"><b>${name}</b> <span class="cnt">×${n}</span><p>${d}</p>${how ? `<p class="how">${how}</p>` : ''}</div>${btn || ''}</div>`;
+  const cons = Object.entries(CONSUMABLES).map(([id, c]) => row(iconStyle('loot', c.icon), esc(c.name), S.cons[id] || 0, esc(c.d), esc(c.how),
+    `<button class="btn sm" data-use="${id}" ${inStage && S.cons[id] ? '' : 'disabled'}>${id === 'gimbap' ? '먹기' : '마시기'}</button>`)).join('');
+  const boost = row(`${iconStyle('loot', LOOT.energy)}" data-x2="1`, '경험치 부스터', S.boosters, `켜면 30분 동안 얻는 경험치 2배${left > 0 ? ` · <b style="color:var(--exp)">지금 켜짐 · 남은 시간 ${mmss(left)}</b>` : ''}`,
+    '실제 시간으로 흐른다(게임을 꺼도 줄어든다). 또 켜면 30분씩 늘어난다. 화면 위 경험치 바 아래에 남은 시간이 보인다.',
+    `<button class="btn sm" data-act="useboost" ${S.boosters ? '' : 'disabled'}>${left > 0 ? '+30분' : '켜기'}</button>`);
+  const qi = Object.entries(S.qitems).filter(([, n]) => n > 0);
+  const mats = [row(iconStyle('loot', LOOT.contract), '헤드헌팅 계약서', S.contracts, '상점 → 서초 백화점(장비 뽑기)에서 공짜로 1회 뽑기', '', S.contracts ? '<button class="btn ghost sm" data-act="toshop">백화점</button>' : '')]
+    .concat(['b1', 'b2', 'b3'].map((b) => row(iconStyle('equip', 1), esc(BOOKS[b].name), S.books[b] || 0, esc(BOOKS[b].d), '메뉴 → 스킬에서 배울 때 자동으로 쓴다. 정예·보스에게서 나온다', '')))
+    .concat(qi.map(([it, n]) => row(iconStyle(QITEMS[it].icon[0], QITEMS[it].icon[1]), esc(QITEMS[it].name), n, '퀘스트 납품용', '모으면 마을에서 퀘스트를 준 사람에게 보고', ''))).join('');
+  return `<div class="card"><h3>소모품</h3>${inStage ? '' : '<p class="note">먹고 마시는 건 사건(전투) 중에만 쓸 수 있어요. 마을 김밥집(상점)에서 수임료로 산다.</p>'}<div style="display:grid;gap:6px">${cons}${boost}</div></div>
+  <div class="card"><h3>재료</h3><div style="display:grid;gap:6px">${mats}</div></div>`;
 }
 // 코디: 코스튬 갈아입기 + 수집 효과. 장비(성능)와 분리된 외형 레이어
 const pctLine = (e) => Object.entries(e).map(([k, v]) => `${{ atkPct: '논리력', hpPct: '멘탈', spd: '공격 속도', crit: '결정타', dr: '받는 피해 감소', skill: '스킬 피해', exp: '경험치', gold: '수임료', mprPct: '커피 회복' }[k] || k} +${(v * 100).toFixed(1)}%`).join(' · ');
@@ -1234,9 +1399,9 @@ function shopTab() {
     <p>인지로 뽑는다. 모자·등 장식. 입으면 모습이 바뀌고, <b>모으기만 해도</b> 수집 효과(능력치)가 쌓입니다. 12종 완성 시 세트 효과. 확률: 고급 55% · 희귀 33% · 영웅 10% · 전설 2%. 중복이면 인지 30 환급.</p>${cosOdds()}
     <div class="row wrap"><button class="btn sm" data-cosg="1" ${S.inji >= 120 || S.cosTickets ? '' : 'disabled'}>${S.cosTickets ? `뽑기권 1회 (${S.cosTickets})` : '1회 · 인지 120'}</button><button class="btn red sm" data-cosg="10" ${S.inji >= 1100 ? '' : 'disabled'}>10회 · 인지 1,100</button>${S.inji < 1100 ? '<button class="btn ghost sm" data-act="tocharge">인지 충전</button>' : ''}</div></div>
   ${injiCard()}
-  ${scene === 'town' ? `<div class="card"><h3>김밥집</h3><div class="grid">${Object.entries(CONSUMABLES).map(([id, cc]) => `<div class="slot" data-buyc="${id}" title="${esc(cc.d)}"><div class="ic" style="${iconStyle('loot', cc.icon)}"></div><span class="n">₩${fmt(cc.price(c))}</span></div>`).join('')}</div><p>탭해서 구매 (수임료).</p></div>` : '<p class="note">김밥집은 마을에서 이용할 수 있습니다.</p>'}
+  ${scene === 'town' ? `<div class="card"><h3>김밥집 <span class="note">수임료로 구매 · 가방에서 사용</span></h3><div style="display:grid;gap:6px">${Object.entries(CONSUMABLES).map(([id, cc]) => `<div class="citem"><div class="ic" style="${iconStyle('loot', cc.icon)}"></div><div style="min-width:0"><b>${esc(cc.name)}</b> <span class="note">보유 ${S.cons[id] || 0}</span><p>${esc(cc.d)}</p></div><button class="btn sm" data-buyc="${id}" ${S.gold >= cc.price(c) ? '' : 'disabled'}>₩${fmt(cc.price(c))}</button></div>`).join('')}</div></div>` : '<p class="note">김밥집은 마을에서 이용할 수 있습니다.</p>'}
   <div class="card"><h3>성장 상점</h3>
-    <div class="row between"><span><b>경험치 부스터</b><br><span class="note">30분간 경험치 2배 · 보유 ${S.boosters}</span></span><button class="btn sm" data-act="buyboost" ${S.inji >= 150 ? '' : 'disabled'}>인지 150</button></div>
+    <div class="row between"><span><b>경험치 부스터</b><br><span class="note">켜면 30분간 경험치 2배 (가방에서 켜기) · 보유 ${S.boosters}</span></span><button class="btn sm" data-act="buyboost" ${S.inji >= 150 ? '' : 'disabled'}>인지 150</button></div>
     <div class="row between"><span><b>비급 · 중급</b><br><span class="note">스킬 배우기 재료</span></span><button class="btn sm" data-bbook="b2" ${S.inji >= 300 ? '' : 'disabled'}>인지 300</button></div>
     <div class="row between"><span><b>비급 · 고급</b><br><span class="note">마지막 스킬 재료</span></span><button class="btn sm" data-bbook="b3" ${S.inji >= 800 ? '' : 'disabled'}>인지 800</button></div>
     <div class="row between"><span><b>스킬 초기화</b><br><span class="note">모든 스킬을 Lv.1로 · 쓴 SP·수임료 전부 환급 (배운 스킬은 그대로)</span></span><button class="btn sm ${skArm ? 'red' : ''}" data-act="skreset" ${S.inji >= 200 ? '' : 'disabled'}>${skArm ? '정말 초기화?' : '인지 200'}</button></div>
@@ -1488,7 +1653,7 @@ function stageResults(first, bonus, stars) {
   openSheet('사건 종결', [], () => `
     <div class="card"><div class="row between"><h3>${c}-${s} ${esc(W.ch.stages[s - 1])} ${W.tier ? `· ${TIERS[W.tier].name}` : ''}</h3><span class="stars big">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span></div>
       <div class="goal ok">★ 사건 해결</div><div class="goal ${W.hits <= 6 ? 'ok' : ''}">${W.hits <= 6 ? '★' : '☆'} 피격 6회 이하 (${W.hits}회)</div><div class="goal ${W.t <= W.par ? 'ok' : ''}">${W.t <= W.par ? '★' : '☆'} ${mm(W.par)} 안에 해결 (${mm(W.t)})</div>
-      <table class="tbl"><tr><td>처치</td><td>${W.kills}</td></tr><tr><td>수임료</td><td>₩${fmt(L.gold)}</td></tr><tr><td>경험치</td><td>${fmt(L.exp)}</td></tr>${bonus ? `<tr><td>${first ? '첫 해결·별 보상' : '별 보상'}</td><td>인지 ${bonus}</td></tr>` : ''}
+      <table class="tbl"><tr><td>처치</td><td>${W.kills}</td></tr><tr><td>수임료</td><td>₩${fmt(L.gold)}</td></tr><tr><td>경험치</td><td>${fmt(L.exp)}${L.boost ? ` <span class="note" style="color:var(--exp)">(부스터 2배 +${fmt(L.boost)})</span>` : ''}</td></tr>${bonus ? `<tr><td>${first ? '첫 해결·별 보상' : '별 보상'}</td><td>인지 ${bonus}</td></tr>` : ''}
       ${Object.entries(L.books).map(([b, n]) => `<tr><td>${BOOKS[b].name}</td><td>×${n}</td></tr>`).join('')}${Object.entries(L.qitems).map(([it, n]) => `<tr><td>${esc(QITEMS[it].name)}</td><td>×${n}</td></tr>`).join('')}</table>
       ${L.items.length ? `<div class="grid">${L.items.map((it) => `<div class="slot g${it.grade}" title="${esc(it.name)}"><div class="ic" style="${itemIcon(it)}"></div></div>`).join('')}</div>` : '<p>장비 드랍 없음</p>'}
     </div>
@@ -1567,13 +1732,14 @@ function onSheetClick(ev) {
   }
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
+  else if (a === 'toshop') openMenu('shop');
   else if (a === 'bugsend') { if (isChild()) return; if (!($('#bug-ok') || {}).checked) { toast('보낼 정보에 동의(체크)해야 보낼 수 있어요'); return; } const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
   else if (a === 'savefile') exportSave();
   else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();
   else if (a === 'buyai') { if (S.inji < 300) return; S.inji -= 300; S.aiUntil = Math.max(now(), S.aiUntil) + 7 * 864e5; toast('AI 법률비서 7일 · AUTO 공격력 100% + 스킬 사용'); SFX.play('coin'); refreshSheet(); }
-  else if (a === 'useboost') { if (!S.boosters) { toast('부스터가 없습니다 · 상점에서 구매'); return; } S.boosters--; S.boostUntil = Math.max(now(), S.boostUntil) + 30 * 60000; toast('경험치 2배 30분!'); SFX.play('level'); refreshSheet(); }
-  else if (a === 'buyboost') { if (S.inji < 150) return; S.inji -= 150; S.boosters++; toast('경험치 부스터 구매 · 가방에서 사용'); SFX.play('coin'); refreshSheet(); }
+  else if (a === 'useboost') { if (!S.boosters) { toast('부스터가 없습니다 · 상점에서 구매'); return; } S.boosters--; S.boostUntil = Math.max(now(), S.boostUntil) + 30 * 60000; boostWas = true; toast(`경험치 2배 켜짐 · 남은 시간 ${mmss(S.boostUntil - now())} (화면 위에 표시)`, 3500); SFX.play('level'); refreshSheet(); save(); }
+  else if (a === 'buyboost') { if (S.inji < 150) return; S.inji -= 150; S.boosters++; toast('경험치 부스터 구매 · 메뉴 → 가방에서 「켜기」'); SFX.play('coin'); refreshSheet(); }
   else if (a === 'tmusic') { S.music = !S.music; BGM.setOn(S.music); refreshSheet(); }
   else if (a === 'tsound') { SFX.init(); S.sound = !S.sound; SFX.on = S.sound; refreshSheet(); }
   else if (a === 'tsell') { S.autoSell = !S.autoSell; refreshSheet(); }
@@ -1814,7 +1980,7 @@ window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, ageGate, get ageMode() { return ageMode; }, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick,
+  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, ageGate, get ageMode() { return ageMode; }, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick, heroPreview, poseOf,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});

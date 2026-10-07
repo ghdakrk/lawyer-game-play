@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.4-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.5-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -723,7 +723,7 @@ function killMob(m) {
   if (m.elite && Math.random() < 0.06) { const left = Object.keys(TRIVIA).filter((t) => !S.trivia.includes(t)); if (left.length) { W.texts.push({ x: m.x, y: m.y - m.h - 10, s: '판례 카드!', c: '#ffe45c', t: 0, big: true }); learnTrivia(pick(left)); } }
   questKill(m.id);
   const g = W.g;
-  const expv = SCALE.exp(g) * (m.elite ? 4 : 1) * (m.mid ? 14 : 1) * st.exp * df.rew; gainExp(expv); W.loot.exp += expv;
+  const expv = SCALE.exp(g) * (m.elite ? 4 : 1) * (m.mid ? 14 : 1) * st.exp * df.rew; gainExp(expv); W.loot.exp += expv; if (S.boostUntil > now()) W.loot.boost = (W.loot.boost || 0) + expv / 2;
   dropCoins(m.x, m.y - m.h / 2, SCALE.gold(g) * (m.elite ? 4 : 1) * (m.mid ? 12 : 1) * st.gold * df.rew, m.elite || m.mid ? 6 : irand(1, 2));
   if (m.mid || (m.elite && Math.random() < 0.3) || Math.random() < 0.012) dropItem(m.x, m.y - m.h / 2, { gradeBoost: m.mid ? 1 : 0 });
   if (Math.random() < 0.02) dropLoot(m.x, m.y - 20, pick(['gimbap', 'coffee', 'coffee', 'americano']));
@@ -967,7 +967,7 @@ function bossDefeated(b) {
   W.eprj = [];
   const df = diff(), st = stats();
   const rm = b.id === 'kim' ? 1 + 0.1 * W.rumorSet.length : b.id === 'kakha' ? 2 : 1;   // 소문을 켤수록, 각하는 2배
-  const expv = SCALE.exp(W.g) * 32 * st.exp * df.rew * rm; gainExp(expv); W.loot.exp += expv;
+  const expv = SCALE.exp(W.g) * 32 * st.exp * df.rew * rm; gainExp(expv); W.loot.exp += expv; if (S.boostUntil > now()) W.loot.boost = (W.loot.boost || 0) + expv / 2;
   dropCoins(b.x, b.y - b.h / 2, SCALE.gold(W.g) * 30 * st.gold * df.rew * rm, 14);
   dropItem(b.x, b.y - b.h / 2, { gradeBoost: W.tier === 2 ? 3 : W.hard ? 2 : 1 }); if (Math.random() < 0.3) dropItem(b.x, b.y - b.h / 2, { gradeBoost: 1 });
   if (Math.random() < 0.06) { const pool = Object.keys(COSMETICS).filter((id) => COSMETICS[id].grade <= 3); dropLoot(b.x, b.y - 40, 'cos', { cos: pick(pool) }); }

@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.4-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.5-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -89,6 +89,7 @@ button { font: inherit; color: inherit; }
 /* toasts */
 #toasts { position: absolute; left: 50%; transform: translateX(-50%); top: 48px; width: min(46%, 380px); display: grid; gap: 4px; pointer-events: none; z-index: 5; }
 #app:not(.land) #toasts { top: 76px; width: 94%; }
+#app.boosting:not(.land) #toasts { top: 96px; } #app.boosting.land #toasts { top: 66px; }   /* 경험치 2배 표시를 가리지 않게 */
 #app:not(.land) .toast { -webkit-line-clamp: 3; }
 .toast { background: rgba(20,24,46,.9); border-left: 3px solid var(--hl); border-radius: 6px; padding: 5px 9px; font-size: 13px; line-height: 1.4; animation: tin .2s both; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .toast .ic { display: inline-block; width: 18px; height: 18px; vertical-align: -5px; margin-right: 4px; background-size: 400% 300%; }
@@ -155,6 +156,17 @@ button { font: inherit; color: inherit; }
 .btn[disabled] { background: var(--panel); color: var(--mute); cursor: not-allowed; }
 .btn.red { background: var(--stamp); color: #fff; } .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
 .btn.sm { padding: 6px 10px; font-size: 13px; }
+#h-boost { justify-self: start; display: flex; gap: 5px; align-items: center; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: rgba(20,24,46,.82); border: 1px solid var(--exp); color: var(--exp); text-shadow: 0 1px 2px #000; animation: bpulse 1.6s ease-in-out infinite; }
+#h-boost b { font-family: var(--font-display); font-weight: 400; } #h-boost span { color: var(--fg); font-variant-numeric: tabular-nums; }
+@keyframes bpulse { 50% { box-shadow: 0 0 8px var(--exp); } }
+.bar.exp.boost > i { background: linear-gradient(90deg, var(--exp), #fff6a8, var(--exp)); background-size: 200% 100%; animation: bshine 1.2s linear infinite; }
+@keyframes bshine { to { background-position: -200% 0; } }
+.citem { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 10px; align-items: center; padding: 6px 8px; background: var(--panel); border-radius: 8px; }
+.citem .ic { width: 44px; height: 44px; background-size: 400% 300%; position: relative; }
+.citem .ic[data-x2]::after { content: '×2'; position: absolute; right: -4px; bottom: -2px; font: 700 12px/1 var(--font-display); color: var(--exp); text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.citem p { margin: 2px 0 0; font-size: 12px; } .citem .how { color: var(--mute); }
+.citem .cnt { font-family: var(--font-display); color: var(--hl); }
+.citem .btn { white-space: nowrap; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
 .slot { position: relative; aspect-ratio: 1; background: var(--panel); border: 2px solid var(--line); border-radius: 8px; cursor: pointer; display: grid; place-items: center; padding: 4px; }
 .slot .ic { width: 82%; height: 82%; background-size: 400% 300%; }
@@ -199,6 +211,7 @@ button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 #qtrack .qt.main { border-color: var(--hl); } #qtrack .qt.job { border-color: #c48cff; } #qtrack .qt.comp { border-color: #6aa9ff; } #qtrack .qt.client { border-color: #7ee08a; } #qtrack .qt.hidden { border-color: #ff8a73; }
 #qtrack .qt.ok { border-color: var(--exp); color: var(--exp); }
 #app:not(.land) #qtrack { top: calc(100% + 6px); left: 8px; max-width: calc(100% - 150px); }
+#app.boosting.land #qtrack { top: 96px; }
 #app:not(.land) #qtrack .qt { font-size: 12px; padding: 3px 7px; }
 .pbtn.nomp { opacity: .55; }
 /* quests & menus */
@@ -320,6 +333,7 @@ button:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
         <div class="bar hp"><i id="h-hp"></i><span id="h-hpt"></span></div>
         <div class="bar mp"><i id="h-mp"></i><span id="h-mpt"></span></div>
         <div class="bar exp"><i id="h-exp"></i></div>
+        <div id="h-boost" hidden><b>EXP×2</b><span id="h-boostt"></span></div>
       </div>
       <div class="right">
         <span class="cur gold">₩<b id="h-gold">0</b></span>
