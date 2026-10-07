@@ -869,7 +869,7 @@ function toast(html, ms = 2600) {
 // ======================================================================
 // 시트 (메뉴)
 // ======================================================================
-let sheetRender = null, sheetTab = null, selItem = null, sheetMode = '';
+let sheetRender = null, sheetTab = null, selItem = null, sheetMode = '', sheetDrawn = null;
 function sheetOpen() { return $('#sheet').classList.contains('show'); }
 // 패드를 누른 채 시트가 열리면, 손을 뗄 때 생기는 클릭이 시트 버튼(입장 등)을 누르는 문제를 막는다
 let sheetT = 0, sheetPD = 0;
@@ -881,16 +881,37 @@ function openSheet(title, tabs, renderFn, tab, mode = '') {
   $('#sh-tabs').innerHTML = tabs.map(([id, name]) => `<button data-tab="${id}" class="${id === sheetTab ? 'on' : ''}">${name}</button>`).join('');
   $('#sh-tabs').style.display = tabs.length ? 'flex' : 'none';
   $('#sh-close').style.visibility = ['major', 'route', 'exam'].includes(mode) ? 'hidden' : '';
-  $('#sheet').classList.add('show'); $('#sh-body').scrollTop = 0; refreshSheet();
+  $('#sheet').classList.add('show'); sheetDrawn = null; $('#sh-body').scrollTop = 0; refreshSheet();
+}
+// 같은 모양의 화면은 통째로 갈아 끼우지 않고 바뀐 글자·속성만 고친다.
+// 누른 버튼과 목록이 그대로 남으니 휴대폰에서 스크롤이 맨 위로 튀지 않는다. 펼친 확률표(details)도 그대로 둔다.
+function morph(from, to) {
+  const a = [...from.childNodes], b = [...to.childNodes];
+  b.forEach((y, i) => {
+    const x = a[i];
+    if (!x) { from.appendChild(y); return; }
+    if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName) { from.replaceChild(y, x); return; }
+    if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; return; }
+    for (const { name } of [...x.attributes]) if (!y.hasAttribute(name) && !(name === 'open' && x.nodeName === 'DETAILS')) x.removeAttribute(name);
+    for (const { name, value } of [...y.attributes]) if (x.getAttribute(name) !== value) x.setAttribute(name, value);
+    morph(x, y);
+  });
+  for (let i = a.length - 1; i >= b.length; i--) from.removeChild(a[i]);
 }
 // 다시 그려도 화면이 튀지 않게: 스크롤 위치를 지키고, 방금 누른 버튼이 같은 자리에 오도록 맞춘다
 let sheetAnchor = null;
 function refreshSheet() {
   if (!sheetRender) return;
-  const body = $('#sh-body'), sc = body.scrollTop;
-  body.innerHTML = sheetRender(sheetTab); body.scrollTop = sc;
+  const body = $('#sh-body'), sc = body.scrollTop, html = sheetRender(sheetTab);
+  if (sheetDrawn && sheetDrawn.r === sheetRender && sheetDrawn.t === sheetTab) { const tpl = document.createElement('template'); tpl.innerHTML = html; morph(body, tpl.content); }
+  else body.innerHTML = html;
+  sheetDrawn = { r: sheetRender, t: sheetTab };
+  body.scrollTop = sc;
   const a = sheetAnchor; sheetAnchor = null;
   if (a && now() - a.t < 400) { const el = body.querySelector(a.sel); if (el) body.scrollTop += el.getBoundingClientRect().top - a.top; }
+  // 그래도 다음 화면에서 위로 튀어 있으면 한 번 되돌린다
+  const want = body.scrollTop, drawn = sheetDrawn;
+  requestAnimationFrame(() => { if (sheetDrawn === drawn && body.scrollTop < want - 2) body.scrollTop = want; });
 }
 function tryCloseSheet() {
   if (sheetMode === 'major' || sheetMode === 'route' || sheetMode === 'exam') return;
