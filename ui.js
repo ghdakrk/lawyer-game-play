@@ -922,7 +922,7 @@ function statTab() {
     <p class="note">레벨업마다 3점. 법률 상식 카드 4장마다 1점.</p>
     ${LAWS.map((l) => `<div class="stat"><span><b>${l.name}</b> ${law[l.id]} <span class="note">[${l.eff}]</span><br><span class="note">1점당 ${l.d} · 지금 ${l.per(law[l.id])}</span></span><button class="btn sm" data-law="${l.id}" data-n="1" ${S.pts ? '' : 'disabled'}>+1</button><button class="btn sm" data-law="${l.id}" data-n="5" ${S.pts >= 5 ? '' : 'disabled'}>+5</button></div>`).join('')}
     <div class="row wrap"><button class="btn ghost sm" data-act="respec">스탯 재배분 (인지 100)</button></div></div>
-  <div class="card"><h3>법률 상식 카드 <span class="note">${S.trivia.length} / ${Object.keys(TRIVIA).length}</span></h3><p class="note">몬스터 대사, 마을 사람들과의 이야기, 전직, 정예 몬스터에게서 모은다. 메뉴 → 도감에서 볼 수 있다.</p></div>
+  <div class="card"><h3>법률 상식 카드 <span class="note">${S.trivia.length} / ${Object.keys(TRIVIA).length}</span></h3><p class="note">몬스터 대사, 마을 사람들과의 이야기, 전직, 정예 몬스터에게서 모은다. 메뉴 → 도감에서 볼 수 있다.</p><p class="note">게임 속 법률 상식은 재미로 보는 일반적인 정보예요. 실제 사건에 대한 법률 자문이 아니며, 법령은 바뀔 수 있으니 실제 문제는 전문가와 상담하세요.</p></div>
   ${S.titles.length ? `<div class="card"><h3>칭호</h3><p>${S.titles.map((t) => `「${esc(t)}」`).join(' ')}</p></div>` : ''}`;
 }
 
@@ -1263,6 +1263,7 @@ function bookTab() {
     <p class="note">추가 예정 히든 직업: ${HIDDEN_LOCKED.map((h) => `${h.name}(${h.hint})`).join(' · ')}</p></div>
   <div class="card"><h3>인물</h3><div class="bestiary">${npcs.map(([id, name, desc, src]) => cell({ src, name, desc, seen: id !== 'kakha' || !!S.story.post_3, hint: '???' })).join('')}</div></div>
   <div class="card"><h3>법률 상식 카드 <span class="note">${S.trivia.length}/${Object.keys(TRIVIA).length} · 4장마다 스탯 +1</span></h3>
+    <p class="note">게임 속 법률 상식은 재미로 보는 일반적인 정보예요. 실제 사건에 대한 법률 자문이 아니며, 법령은 바뀔 수 있으니 실제 문제는 전문가와 상담하세요.</p>
     <div class="tcards">${Object.entries(TRIVIA).map(([id, c]) => S.trivia.includes(id) ? `<div class="tcard"><b>${esc(c.t)}</b><span>${esc(c.d)}</span><em>${esc(c.law)}</em></div>` : '<div class="tcard no"><b>???</b><span>몬스터 대사·마을 사람·전직에서 얻는다</span></div>').join('')}</div></div>
   <div class="card"><h3>소문 도감 <span class="note">${S.rumors.length}/10 · 정예·중간 보스의 「비밀 쪽지」</span></h3>
     ${RUMORS.map((r, i) => S.rumors.includes(i) ? `<div class="stat"><span><b>#${i + 1}</b> “${esc(r.line)}”<br><span class="note">${esc(r.npc)} · 최종장에서 켜면: ${esc(r.eff)}</span></span><span></span><span></span></div>` : `<div class="stat"><span><b>#${i + 1}</b> ???</span><span></span><span></span></div>`).join('')}</div>`;
