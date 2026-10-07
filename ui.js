@@ -739,9 +739,16 @@ function drawWig(g, layer, cl, t) {
   ctx.quadraticCurveTo((front + back) / 2 + 0.12 * U, brow + 0.03 * U, back + 0.02 * U, brow + 0.22 * U); ctx.closePath();
   const gr = ctx.createRadialGradient(0.05 * U, top + 0.14 * U, 0.04 * U, -0.1 * U, brow * 0.7, 0.8 * U); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, W0); gr.addColorStop(0.85, W1); gr.addColorStop(1, W2);
   ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.6; ctx.stroke();
-  ctx.save(); ctx.clip(); ctx.lineWidth = 1.7;   // 결: 앞이마에서 뒤로 흘러가는 물결
-  for (let k = 0; k < 4; k++) { const y0 = top + (0.12 + k * 0.12) * U; ctx.strokeStyle = k % 2 ? 'rgba(160,145,140,.45)' : 'rgba(150,135,130,.6)'; ctx.beginPath(); ctx.moveTo(front + 0.02 * U, y0 + 0.1 * U); ctx.bezierCurveTo(0.15 * U, y0 - 0.06 * U, -0.2 * U, y0 + 0.12 * U, back - 0.05 * U, y0 + 0.02 * U); ctx.stroke(); }
-  ctx.fillStyle = 'rgba(120,100,100,.18)'; ctx.beginPath(); ctx.ellipse(back + 0.1 * U, brow + 0.08 * U, 0.22 * U, 0.16 * U, 0, 0, Math.PI * 2); ctx.fill();   // 뒤 아래 그늘
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(0.08 * U, top + 0.13 * U, 0.24 * U, 0.07 * U, -0.25, 0, Math.PI * 2); ctx.fill();   // 윤기
+  ctx.lineWidth = 1.7;   // 결: 이마 위에서 뒤통수로 빗어 넘긴 소용돌이
+  for (let k = 0; k < 5; k++) {
+    const sy = top + (0.1 + k * 0.08) * U;
+    ctx.strokeStyle = k % 2 ? 'rgba(150,135,130,.45)' : 'rgba(135,120,115,.6)';
+    ctx.beginPath(); ctx.moveTo(front - (0.04 + k * 0.05) * U, sy + 0.05 * U);
+    ctx.bezierCurveTo(0.12 * U - k * 0.04 * U, sy - 0.09 * U, -0.32 * U, sy - 0.03 * U, back + 0.05 * U, sy + (0.13 + k * 0.03) * U); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(120,100,100,.2)'; ctx.beginPath(); ctx.ellipse(back + 0.1 * U, brow + 0.08 * U, 0.24 * U, 0.17 * U, 0, 0, Math.PI * 2); ctx.fill();   // 뒤 아래 그늘
   ctx.restore();
   if (g.back) { for (let r = 0; r < 3; r++) roll(-0.6 * U, 0.6 * U, brow + (0.04 + r * 0.15) * U, 0.16 * U); return; }
   // 귀 옆 컬 세 줄 (뒤에서 앞으로, 끝 단면이 얼굴 쪽)
