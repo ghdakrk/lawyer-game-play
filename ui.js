@@ -1476,10 +1476,10 @@ function optTab() {
     <div class="stat"><span><b>효과음</b></span><span></span><button class="btn sm ${S.sound ? '' : 'ghost'}" data-act="tsound">${S.sound ? '켬' : '끔'}</button></div>
     <div class="stat"><span><b>일반 장비 자동 판매</b><br><span class="note">끼고 있는 것보다 약한 일반 등급은 줍자마자 판매</span></span><span></span><button class="btn sm ${S.autoSell ? '' : 'ghost'}" data-act="tsell">${S.autoSell ? '켬' : '끔'}</button></div></div>
   <div class="card hot"><h3>버그 제보 <span class="note">테스트 v${GAME_VERSION}</span></h3>
-    <p class="note">어디서 무엇을 하다가 어떤 문제가 생겼는지 적어 주세요. 기기·진행 상황·최근 오류가 자동으로 붙습니다. 화면 캡처도 같이 보내 주시면 큰 도움이 돼요.</p>
+    <p class="note">어디서 무엇을 하다가 어떤 문제가 생겼는지 적어 주세요. 기기·진행 상황·최근 오류가 자동으로 붙습니다. 누르면 메일 앱이 받는 사람(<b>${BUG_MAIL}</b>)·제목·내용이 채워진 채로 열려요 → 「보내기」만 누르면 끝. 화면 캡처·세이브 파일을 첨부해 주시면 큰 도움이 돼요.</p>
     <textarea id="bug-text" rows="3" placeholder="예: 3-2에서 줄을 타다가 캐릭터가 벽에 끼었어요"></textarea>
     ${isChild() ? '<p class="note">만 14세 미만은 보호자에게 부탁해 보호자의 메일로 보내 주세요.</p>' : '<label class="note" style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="bug-ok" style="margin-top:3px"><span>(선택) 적은 내용과 함께 앱 버전·기기·화면 정보·진행 상황·최근 오류 기록을 운영자에게 보내는 데 동의합니다. 문제 확인에만 쓰고 처리가 끝나면 지웁니다. 동의하지 않아도 게임은 그대로 할 수 있어요.</span></label>'}
-    <div class="row wrap">${isChild() ? '' : '<button class="btn sm" data-act="bugsend">제보 보내기 (카톡·메일)</button>'}<button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
+    <div class="row wrap">${isChild() ? '' : '<button class="btn sm" data-act="bugsend">메일로 제보 보내기</button>'}<button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
   <div class="card"><h3>프로토타입 정보</h3><p>v${GAME_VERSION}. 아트는 Higgsfield(GPT Image 2.5) 프레임 시트. 음악은 코드로 만든 칩튠. 저장은 이 브라우저에만 됩니다.</p>
   <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>
   <div class="card"><h3>계정·데이터 삭제</h3><p class="note">이 기기의 모든 슬롯·엔딩 도감·구매 기록·설정을 지웁니다. 되돌릴 수 없어요. 영구 상품은 같은 스토어 계정으로 「구매 복원」하면 다시 받을 수 있지만, 진행과 인지 잔액은 복구되지 않습니다. <a href="${PRIVACY_URL}#delete" target="_blank" rel="noopener" style="color:var(--hl)">개인정보 처리방침</a> 제9조.</p>
@@ -1497,13 +1497,21 @@ function bugReport(desc) {
     `진행: 슬롯 ${SLOT} · ${jobName()} Lv.${S.lv} · 사건 ${Object.keys(S.cleared || {}).length}/25${S.ng ? ` · 재심 ${S.ng}회차` : ''} · 지금 ${scene}${W && W.id ? ` ${W.id}` : ''}${W && W.tier ? ` (${TIERS[W.tier].name})` : ''}`,
     `내용: ${desc || '(적지 않음)'}`, `최근 오류: ${ERRLOG.length ? `\n${ERRLOG.join('\n')}` : '없음'}`].join('\n');
 }
-// 휴대폰은 공유 창(카톡·메일 고르기), 안 되면 복사
-async function sendText(text, title) {
-  try { if (window.navigator.share) { await window.navigator.share({ title, text }); return 'shared'; } } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
-  try { await window.navigator.clipboard.writeText(text); return 'copied'; } catch (e) { /* 아래 방법으로 */ }
+// 버그 제보는 운영자 메일로: 메일 앱을 받는 사람·제목·내용이 채워진 채로 연다 (예전 「공유 창」은 받는 사람이 없어 제보가 오지 않았다)
+// 앱(안드로이드)에서는 mailto 링크를 Capacitor가 메일 앱(지메일·네이버 메일 등)으로 넘긴다
+const BUG_MAIL = 'barbariankent@naver.com';
+const BUG_TAG = '[법조인키우기 버그]';   // 메일함에서 이 말머리로 분류(필터)
+function bugSubject() { return `${BUG_TAG} v${GAME_VERSION} · ${W && W.id ? W.id : scene} · ${jobName()} Lv.${S.lv}`; }
+function openMail(to, subject, body) {
+  if (body.length > 1800) body = body.slice(0, 1800) + '\n…(길어서 잘림)';   // 일부 메일 앱은 너무 긴 링크를 자른다
+  const a = document.createElement('a'); a.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+}
+async function copyText(text) {
+  try { await window.navigator.clipboard.writeText(text); return true; } catch (e) { /* 아래 방법으로 */ }
   const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); let ok = false;
   try { ok = document.execCommand('copy'); } catch (e) { /* 무시 */ }
-  ta.remove(); return ok ? 'copied' : 'fail';
+  ta.remove(); return ok;
 }
 function exportSave() {
   save(); const blob = new window.Blob([JSON.stringify(S)], { type: 'application/json' });
@@ -1745,7 +1753,13 @@ function onSheetClick(ev) {
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
   else if (a === 'toshop') openMenu('shop');
-  else if (a === 'bugsend') { if (isChild()) return; if (!($('#bug-ok') || {}).checked) { toast('보낼 정보에 동의(체크)해야 보낼 수 있어요'); return; } const desc = (($('#bug-text') || {}).value || '').trim(); sendText(bugReport(desc), '법조인 키우기 버그 제보').then((res) => { if (res === 'copied') toast('제보 내용을 복사했어요. 카톡이나 메일에 붙여 넣어 보내 주세요', 4500); else if (res === 'shared') toast('고마워요! 제보를 보냈어요'); else if (res === 'fail') toast('복사가 막혀 있어요. 화면을 캡처해서 보내 주세요', 4000); }); }
+  else if (a === 'bugsend') {
+    if (isChild()) return; if (!($('#bug-ok') || {}).checked) { toast('보낼 정보에 동의(체크)해야 보낼 수 있어요'); return; }
+    const desc = (($('#bug-text') || {}).value || '').trim(), body = bugReport(desc);
+    copyText(`받는 곳: ${BUG_MAIL}\n제목: ${bugSubject()}\n\n${body}`);   // 메일 앱이 안 열릴 때를 대비해 복사도 해 둔다
+    openMail(BUG_MAIL, bugSubject(), body);
+    toast('메일 앱에서 「보내기」를 눌러 주세요 (안 열리면 내용이 복사돼 있어요 → 위 주소로 붙여 넣기)', 7000);
+  }
   else if (a === 'savefile') exportSave();
   else if (a === 'openext') openExternal();
   else if (a === 'later') tryCloseSheet();

@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.6-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.7-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -87,7 +87,7 @@ button { font: inherit; color: inherit; }
 #dlg-next { float: right; font-size: 12px; color: var(--mute); }
 #dlg-skip { position: absolute; right: 8px; top: -26px; }
 /* toasts */
-#toasts { position: absolute; left: 50%; transform: translateX(-50%); top: 48px; width: min(46%, 380px); display: grid; gap: 4px; pointer-events: none; z-index: 5; }
+#toasts { position: absolute; left: 50%; transform: translateX(-50%); top: 48px; width: min(46%, 380px); display: grid; gap: 4px; pointer-events: none; z-index: 26; }   /* 메뉴 창(20)·안내(25) 위에: 창 안에서 띄운 알림(구매 완료·동의 체크 등)이 가려지지 않게 */
 #app:not(.land) #toasts { top: 76px; width: 94%; }
 #app.boosting:not(.land) #toasts { top: 96px; } #app.boosting.land #toasts { top: 66px; }   /* 경험치 2배 표시를 가리지 않게 */
 #app:not(.land) .toast { -webkit-line-clamp: 3; }
