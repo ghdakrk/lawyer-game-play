@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.5-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.6-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -844,16 +844,26 @@ function hitProp(pr) {
     questDrops(pr, 'safe');
   }
 }
+// 오토: 근처(360px)에 적이 없으면 화면 안에 떨어진 돈·아이템을 모두 끌어온다 (발판·금고층에 남겨 두지 않게)
+const SWEEP_X = 360, SWEEP_Y = 300;
+const autoSweep = () => S.auto && !player.dead && !liveMobs().some((m) => !m.fake && Math.abs(m.x - player.x) < SWEEP_X && Math.abs(m.y - player.y) < SWEEP_Y);
+const inSweep = (k) => Math.abs(k.x - player.x) < SWEEP_X && Math.abs(k.y - (player.y - 26)) < SWEEP_Y;
 function updatePickups(dt) {
-  const p = player;
+  const p = player, sweep = autoSweep();
   for (const k of W.pickups) {
-    k.t += dt; const oldY = k.y; k.vy += 900 * dt; k.x += k.vx * dt; k.y += k.vy * dt; k.vx *= 0.96;
+    k.t += dt;
+    if (sweep && k.t > 0.4 && inSweep(k)) {   // 오토 줍기: 땅·발판과 상관없이 곧장 날아온다
+      k.vx = k.vy = 0; const f = Math.min(1, dt * 7); k.x += (p.x - k.x) * f; k.y += (p.y - 26 - k.y) * f;
+      if (Math.hypot(p.x - k.x, (p.y - 26) - k.y) < 18) { k.done = true; collect(k); }
+      continue;
+    }
+    const oldY = k.y; k.vy += 900 * dt; k.x += k.vx * dt; k.y += k.vy * dt; k.vx *= 0.96;
     const floor = GROUND - 6; if (k.y > floor) { k.y = floor; k.vy *= -0.35; k.vx *= 0.7; }
     else if (k.vy > 0) { const pl = platformsUnder(k.x, oldY + 6, k.y + 6); if (pl) { k.y = pl.y - 6; k.vy *= -0.35; k.vx *= 0.7; } }
     let c = p, d = Math.hypot(p.x - k.x, (p.y - 26) - k.y);   // 가장 가까운 사람이 줍는다 (동료 포함)
     for (const a of W.allies || []) { const da = Math.hypot(a.x - k.x, (a.y - 26) - k.y); if (da < d) { d = da; c = a; } }
     const dx = c.x - k.x, dy = (c.y - 26) - k.y;
-    const mag = k.k === 'coin' ? 90 : 70;
+    const mag = k.k === 'coin' ? (S.auto ? 120 : 90) : 70;   // 오토는 싸우는 중에도 돈을 조금 더 멀리서 끌어온다
     if (k.t > 0.4 && d < mag) { k.x += dx * Math.min(1, dt * 9); k.y += dy * Math.min(1, dt * 9); }
     if (k.t > 0.4 && d < 18) { k.done = true; collect(k); }
   }
@@ -1356,14 +1366,9 @@ function autoPilot() {
   if (p.hp < st.hp * (targets.some((m) => m.boss) ? 0.55 : 0.45) && S.cons.gimbap > 0) pressed.potion = true;
   if (p.mp < st.mp * 0.15 && S.cons.coffee > 0 && targets.some((m) => m.boss || m.mid)) useCons('coffee');
   if (!targets.length) {
-    // 떨어진 수임료·장비부터 줍는다 (금고를 깨고 바로 떠나지 않게)
-    const loot = W.pickups.filter((k) => !k.done && Math.abs(k.x - p.x) < 340 && Math.abs(k.y - p.y) < 220).sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x))[0];
-    if (loot && (p.lootT = (p.lootT || 0) + 1 / 60) < 7) {
-      if (p.climb) { keys.down = true; return; }
-      if (Math.abs(loot.y + 6 - p.y) > 40) navTo(loot.x, loot.y + 6, W.platforms.find((q) => Math.abs(q.y - loot.y - 6) < 6 && loot.x >= q.x - 4 && loot.x <= q.x + q.w + 4) || null);
-      else if (Math.abs(loot.x - p.x) > 8) keys[loot.x > p.x ? 'right' : 'left'] = true;
-      return;
-    }
+    // 떨어진 수임료·장비가 다 날아올 때까지 기다린다 (오토 줍기 · 금고를 깨고 바로 떠나지 않게)
+    const loot = W.pickups.some((k) => !k.done && inSweep(k));
+    if (loot && (p.lootT = (p.lootT || 0) + 1 / 60) < 3) return;
     if (!loot) p.lootT = 0;
     let prop = p.ap && !p.ap.dead && !p.ap.skip ? p.ap : W.props.find((x) => !x.dead && !x.skip && Math.abs(x.x - p.x) < 220);
     if (prop !== p.ap) { p.ap = prop; p.apT = 0; }

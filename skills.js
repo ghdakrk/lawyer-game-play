@@ -51,11 +51,11 @@ function basicHit() {
     meleeBox(p.face, b.melee, 60, dmg, { kb: 80, basic: true });
     const sp = big ? 430 : 380, n = aw ? 2 : 1;
     for (let i = 0; i < n; i++) { const a = n > 1 ? (i ? 0.07 : -0.07) : 0;
-      W.pprj.push({ k: b.proj, x: p.x + p.face * 22, y: p.y - 34 + (n > 1 ? (i ? 7 : -7) : 0), vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 14 : 9, dmg: dmg * (aw ? 0.4 : 0.5), pierce: big ? 3 : 0, hit: new Set(), life: (b.dist * (big ? 1.3 : 1)) / sp, rot: 0, face: p.face, color: col, sc: big ? 1.45 : 1, tr: [], basic: 'proj', seek: aw ? 2 : 0, ultMul: aw ? 0.6 : 1 }); }
+      W.pprj.push({ k: b.proj, x0: p.x, x: p.x + p.face * 22, y: p.y - 34 + (n > 1 ? (i ? 7 : -7) : 0), vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 14 : 9, dmg: dmg * (aw ? 0.4 : 0.5), pierce: big ? 3 : 0, hit: new Set(), life: (b.dist * (big ? 1.3 : 1)) / sp, rot: 0, face: p.face, color: col, sc: big ? 1.45 : 1, tr: [], basic: 'proj', seek: aw ? 2 : 0, ultMul: aw ? 0.6 : 1 }); }
   } else if (b.k === 'shot') {
     const sp = 460; const n = aw ? [0, 2, 3, 5][c] : big ? 3 : 1; const aim = aimAngle(p, b.dist);
     const per = aw ? [0, 0.7, 0.6, 0.5][c] : big ? 0.8 : 1, spread = aw ? 0.09 : 0.12;
-    for (let i = 0; i < n; i++) { const a = aim + (i - (n - 1) / 2) * spread; W.pprj.push({ k: b.proj, x: p.x + p.face * 24, y: p.y - 40, vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 11 : 9, dmg: dmg * per, pierce: b.pierce || 0, hit: new Set(), life: b.dist * (aw ? 1.15 : 1) / sp, face: p.face, color: col, sc: big ? 1.3 : 1, tr: [], basic: aw ? 'proj' : 'melee', seek: aw ? 3.2 : 0, ultMul: aw ? 0.5 : 1 }); }
+    for (let i = 0; i < n; i++) { const a = aim + (i - (n - 1) / 2) * spread; W.pprj.push({ k: b.proj, x0: p.x, x: p.x + p.face * 24, y: p.y - 40, vx: Math.cos(a) * p.face * sp, vy: Math.sin(a) * sp, r: big ? 11 : 9, dmg: dmg * per, pierce: b.pierce || 0, hit: new Set(), life: b.dist * (aw ? 1.15 : 1) / sp, face: p.face, color: col, sc: big ? 1.3 : 1, tr: [], basic: aw ? 'proj' : 'melee', seek: aw ? 3.2 : 0, ultMul: aw ? 0.5 : 1 }); }
     fxSparkle(p.x + p.face * 26, p.y - 40, col, aw ? 8 : 5);
   } else if (b.k === 'lash') {
     const r = b.range * (big ? 1.2 : 1);
@@ -541,8 +541,13 @@ function updateProjectiles(dt) {
       damageMob(m, s.dmg, { kb: s.kb ?? (s.ally ? 40 : 70), up: s.up, stun: s.stun, src: s.x - s.vx, ally: s.ally, color: s.color, quiet: s.quiet, basic: s.basic, ultMul: s.ultMul });
       if (--s.pierce < 0) { s.life = 0; break; }
     }
-    // 금고
-    if (!s.ally && s.k !== 'pcard') for (const pr of W.props) if (!pr.dead && !s.hit.has(pr) && Math.abs(pr.x - s.x) < 18 && s.y > pr.y - 50 && s.y < pr.y + 6) { s.hit.add(pr); hitProp(pr); }
+    // 금고: 기본 공격 탄은 몸 앞 24px에서 생기므로, 금고에 바싹 붙어 쏘면 탄이 금고를 지나친 자리에서 출발한다
+    // → 출발점(x0, 쏜 사람 위치)부터 지금 위치까지 지나간 구간 전체로 맞았는지 본다
+    if (!s.ally && s.k !== 'pcard') for (const pr of W.props) {
+      if (pr.dead || s.hit.has(pr) || !(s.y > pr.y - 50 && s.y < pr.y + 6)) continue;
+      const passed = s.x0 != null ? pr.x > Math.min(s.x0, s.x) - 18 && pr.x < Math.max(s.x0, s.x) + 18 : Math.abs(pr.x - s.x) < 18;
+      if (passed) { s.hit.add(pr); hitProp(pr); }
+    }
     if (s.life <= 0 && s.boomEnd) explode(s.x, s.y, s.boomR, s.boomEnd, '#ffd24d');
   }
   W.pprj = W.pprj.filter((s) => s.life > 0);

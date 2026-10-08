@@ -1269,7 +1269,9 @@ function appHooks() {
 // ---------- 스토어 결제 ----------
 // 앱(Capacitor): RevenueCat → 구글 플레이 결제 / StoreKit. 웹(테스트 링크): 결제 없이 바로 지급
 // 출시 때 RevenueCat 공개 SDK 키를 넣는다 (docs/12-app-release.md). 키가 비어 있으면 앱에서도 테스트 모드
+// 단, 정식 빌드(build_app.py --release → window.__RELEASE)는 테스트 모드가 없다: 키가 없으면 결제가 열리지 않을 뿐 공짜로 주지 않는다
 const RC_KEY = { android: '', ios: '' };
+const RELEASE = !!window.__RELEASE;
 const PRODUCT_ID = { starter: 'starter_pack', ai: 'ai_secretary', slots: 'save_slots', cos_court: 'cos_court', cos_angel: 'cos_angel', deluxe: 'deluxe_edition',
   p1: 'inji_120', p2: 'inji_600', p3: 'inji_1250', p4: 'inji_3900', monthly: 'monthly_office' };
 const Billing = {
@@ -1277,13 +1279,16 @@ const Billing = {
   native() { const C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); },
   async init() {
     if (!this.native()) return;
-    const C = window.Capacitor, key = RC_KEY[C.getPlatform()]; if (!key) return;
+    const C = window.Capacitor, key = RC_KEY[C.getPlatform()]; if (!key) { if (RELEASE) logErr('정식 빌드인데 RevenueCat 키가 없음'); return; }
     this.rc = (C.Plugins && C.Plugins.Purchases) || (C.registerPlugin && C.registerPlugin('Purchases'));
     try { await this.rc.configure({ apiKey: key }); this.ready = true; } catch (e) { logErr(`결제 초기화 실패: ${e && e.message}`); }
   },
   // 키가 없거나 웹이면 테스트 모드(바로 지급). 앱에서는 처음 결제·구매 복원을 누를 때 결제 서비스에 연결한다 (그 전엔 아무것도 보내지 않음)
-  get test() { const C = window.Capacitor; return !this.native() || !RC_KEY[C.getPlatform()]; },
-  async ensure() { if (!this.ready) await this.init(); if (!this.ready) toast('결제 서비스에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요'); return this.ready; },
+  get test() { if (RELEASE) return false; const C = window.Capacitor; return !this.native() || !RC_KEY[C.getPlatform()]; },
+  async ensure() {
+    if (RELEASE && !this.native()) { toast('결제는 앱에서만 할 수 있어요'); return false; }
+    if (!this.ready) await this.init(); if (!this.ready) toast('결제 서비스에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요'); return this.ready;
+  },
   // 결제가 끝나면 true (취소·실패는 false). 테스트 모드는 바로 true
   async buy(key) {
     if (isChild()) { toast('만 14세 미만은 유료 상품을 살 수 없어요'); return false; }
@@ -1978,8 +1983,8 @@ function init() {
   });
 }
 
-// 테스트 훅
-window.__game = {
+// 테스트 훅 (정식 빌드에는 넣지 않는다)
+if (!RELEASE) window.__game = {
   get S() { return S; }, set S(v) { S = v; }, get W() { return W; }, get player() { return player; }, get scene() { return scene; }, keys, pressed, press, release,
   step(sec, dt = 1 / 60) { for (let t = 0; t < sec; t += dt) { dialogTick(dt); update(dt); } },
   enterStage, enterTown, startDialog, endDialog, dialogNext, get dialog() { return dialog; }, spawnMob, spawnBoss, stats, gainExp, changeJob, kimPrep, closeSheet, openMenu, gacha,
