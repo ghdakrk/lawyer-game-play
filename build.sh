@@ -4,7 +4,7 @@
 set -e
 B=https://raw.githubusercontent.com/ghdakrk/lawyer-game-play/ad-assets
 mkdir -p job && cd job
-for f in game.sh logo.png tag.png sub1.png sub1b.png sub2.png sub3.png sub5.png g1.png g4.png g5.png g6.png g7.png g8.png end.png; do curl -sSf -o $f $B/$f; done
+for f in game.sh logo.png tag.png sub1.png sub1b.png sub2.png sub3.png sub5.png g1.png g4.png g5.png g6.png g7.png g8.png g8b.png end.png; do curl -sSf -o $f $B/$f; done
 for f in a_jobchange e_pros c2_ult f_justice d_kim g_kakha; do curl -sSf -o g_$f.mp4 $B/$f.mp4; done
 for f in bgm_boss bgm_title; do curl -sSf -o g_$f.m4a $B/$f.m4a; done
 curl -sSf -o s1.mp4 "$1"; curl -sSf -o s2.mp4 "$2"; curl -sSf -o s3.mp4 "$3"; curl -sSf -o s5.mp4 "$4"
