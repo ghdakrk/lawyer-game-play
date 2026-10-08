@@ -10,11 +10,13 @@ cut() { # $1 입력 $2 시작 $3 길이 $4 자막png $5 출력 $6 앞 흰빛(1�
     [b]scale=1080:608:flags=lanczos[fg];
     [bg][fg]overlay=0:656[v1];[v1][1:v]overlay=0:0[v2];[v2][2:v]overlay=0:0[v3];[v3][3:v]overlay=0:0,setsar=1${fin}[v]" -map "[v]" -an $ENC $5
 }
-cut g_a_jobchange.mp4 0.0 2.4 g1.png c1.mp4 1
-cut g_b_hunt.mp4      0.5 2.6 g2.png c2.mp4
-cut g_c_ult.mp4       0.0 1.7 g3.png c3.mp4
-cut g_d_kim.mp4       0.1 3.6 g4.png c4.mp4
-printf "file 'c1.mp4'\nfile 'c2.mp4'\nfile 'c3.mp4'\nfile 'c4.mp4'\n" > cl.txt
+cut g_a_jobchange.mp4 0.0  2.0 g1.png c1.mp4 1
+cut g_e_pros.mp4     0.2  2.7 g5.png c2.mp4
+cut g_c2_ult.mp4     0.05 1.3 g6.png c3.mp4
+cut g_f_justice.mp4  0.1  1.4 g7.png c4.mp4
+cut g_d_kim.mp4      0.1  2.5 g4.png c5.mp4
+cut g_g_kakha.mp4    0.25 2.8 g8.png c6.mp4
+printf "file 'c1.mp4'\nfile 'c2.mp4'\nfile 'c3.mp4'\nfile 'c4.mp4'\nfile 'c5.mp4'\nfile 'c6.mp4'\n" > cl.txt
 ffmpeg -v error -y -f concat -safe 0 -i cl.txt -c copy cv.mp4
 D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 cv.mp4)
 ffmpeg -v error -y -i cv.mp4 -i g_bgm_boss.m4a -filter_complex "[1:a]atrim=0:$D,afade=t=out:st=$(python3 -c "print($D-0.4)"):d=0.4,volume=2.2,aresample=48000,aformat=channel_layouts=stereo[a]" -map 0:v -map "[a]" -c:v copy -c:a aac -b:a 192k -ar 48000 seg4.mp4

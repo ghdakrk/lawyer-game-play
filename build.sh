@@ -4,8 +4,8 @@
 set -e
 B=https://raw.githubusercontent.com/ghdakrk/lawyer-game-play/ad-assets
 mkdir -p job && cd job
-for f in game.sh logo.png tag.png sub1.png sub1b.png sub2.png sub3.png sub5.png g1.png g2.png g3.png g4.png end.png; do curl -sSf -o $f $B/$f; done
-for f in a_jobchange b_hunt c_ult d_kim; do curl -sSf -o g_$f.mp4 $B/$f.mp4; done
+for f in game.sh logo.png tag.png sub1.png sub1b.png sub2.png sub3.png sub5.png g1.png g4.png g5.png g6.png g7.png g8.png end.png; do curl -sSf -o $f $B/$f; done
+for f in a_jobchange e_pros c2_ult f_justice d_kim g_kakha; do curl -sSf -o g_$f.mp4 $B/$f.mp4; done
 for f in bgm_boss bgm_title; do curl -sSf -o g_$f.m4a $B/$f.m4a; done
 curl -sSf -o s1.mp4 "$1"; curl -sSf -o s2.mp4 "$2"; curl -sSf -o s3.mp4 "$3"; curl -sSf -o s5.mp4 "$4"
 chmod +x game.sh && ./game.sh
@@ -40,5 +40,5 @@ printf "file 'seg1.mp4'\nfile 'seg2.mp4'\nfile 'seg3.mp4'\nfile 'seg4.mp4'\nfile
 ffmpeg -v error -y -f concat -safe 0 -i all.txt -c copy raw.mp4
 ffmpeg -v error -y -i raw.mp4 -c:v copy -af "loudnorm=I=-15:TP=-1.5:LRA=11,$AUD" -c:a aac -b:a 192k -movflags +faststart ad.mp4
 for f in seg1 seg2 seg3 seg4 seg5 seg6 ad; do echo "$f $(dur $f.mp4)"; done
-ffmpeg -v error -y -i ad.mp4 -vf "fps=1/2.5,scale=180:320,tile=7x2" -frames:v 1 contact.jpg
+ffmpeg -v error -y -i ad.mp4 -vf "fps=1/2,scale=150:266,tile=9x2" -frames:v 1 contact.jpg
 if [ -n "$5" ]; then curl -sSf -X PUT -H "Content-Type: video/mp4" -H "If-None-Match: *" --upload-file ad.mp4 "$5" -o /dev/null -w "UPLOAD %{http_code}\n"; fi
