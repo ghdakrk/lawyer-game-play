@@ -34,7 +34,8 @@ min() { python3 -c "print(min($1,$2))"; }
 L1=$(min $S1_END $(dur s1.mp4)); L5=$(min $S5_END $(dur s5.mp4))
 ffmpeg -v error -y -t $L1 -i s1.mp4 -i logo.png -i sub1.png -i sub1b.png -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1[b];[b][1:v]overlay[v1];[v1][2:v]overlay=enable='between(t,$S1_START,$S1_SWITCH)'[v2];[v2][3:v]overlay=enable='gte(t,$S1_SWITCH)'[v];[0:a]$AUD[a]" -map "[v]" -map "[a]" $ENC -c:a aac -b:a 192k seg1.mp4
 ffmpeg -v error -y -t 4.9 -i s2.mp4 -i logo.png -i sub2.png -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1[b];[b][1:v]overlay[v1];[v1][2:v]overlay=enable='gte(t,$S2_START)'[v];[0:a]$AUD[a]" -map "[v]" -map "[a]" $ENC -c:a aac -b:a 192k seg2.mp4
-ffmpeg -v error -y -t 3.3 -i s3.mp4 -i logo.png -i sub3.png -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1[b];[b][1:v]overlay[v1];[v1][2:v]overlay=enable='gte(t,2.15)',fade=t=out:st=3.12:d=0.18:color=white[v];[0:a]$AUD,afade=t=out:st=3.1:d=0.2[a]" -map "[v]" -map "[a]" $ENC -c:a aac -b:a 192k seg3.mp4
+S3_LEN=${S3_LEN:-3.3}; S3_SUB=${S3_SUB:-2.15}; S3_FADE=$(python3 -c "print($S3_LEN-0.18)")
+ffmpeg -v error -y -t $S3_LEN -i s3.mp4 -i logo.png -i sub3.png -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1[b];[b][1:v]overlay[v1];[v1][2:v]overlay=enable='gte(t,$S3_SUB)',fade=t=out:st=$S3_FADE:d=0.18:color=white[v];[0:a]$AUD,afade=t=out:st=$S3_FADE:d=0.2[a]" -map "[v]" -map "[a]" $ENC -c:a aac -b:a 192k seg3.mp4
 ffmpeg -v error -y -t $L5 -i s5.mp4 -i logo.png -i sub5.png -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1[b];[b][1:v]overlay[v1];[v1][2:v]overlay=enable='gte(t,$S5_START)'[v];[0:a]$AUD[a]" -map "[v]" -map "[a]" $ENC -c:a aac -b:a 192k seg5.mp4
 printf "file 'seg1.mp4'\nfile 'seg2.mp4'\nfile 'seg3.mp4'\nfile 'seg4.mp4'\nfile 'seg5.mp4'\nfile 'seg6.mp4'\n" > all.txt
 ffmpeg -v error -y -f concat -safe 0 -i all.txt -c copy raw.mp4
