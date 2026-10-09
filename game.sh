@@ -11,11 +11,11 @@ cut() { # $1 입력 $2 시작 $3 길이 $4 자막png $5 출력 $6 앞 흰빛(1�
     [b]scale=1080:608:flags=lanczos[fg];
     [bg][fg]overlay=0:656[v1];[v1][1:v]overlay=0:0:enable='lt(t,${8:-999})'[v2];$ov;[v3][3:v]overlay=0:0,setsar=1${fin}[v]" -map "[v]" -an $ENC $5
 }
-cut g_a_jobchange.mp4 0.0  2.0 g1.png c1.mp4 1
+cut g_a_jobchange.mp4 0.0  2.3 g1.png c1.mp4 1
 cut g_e_pros.mp4     0.0  3.6 g5.png c2.mp4
-cut g_c2_ult.mp4     0.05 1.3 g6.png c3.mp4
-cut g_f_justice.mp4  0.1  1.4 g7.png c4.mp4
-cut g_d_kim.mp4      0.1  2.2 g4.png c5.mp4
+cut g_c2_ult.mp4     0.1  3.2 g6.png c3.mp4
+cut g_f_justice.mp4  0.2  2.4 g7.png c4.mp4
+cut g_d_kim.mp4      0.1  3.0 g4.png c5.mp4
 cut g_g_kakha.mp4    0.25 5.2 g8.png c6.mp4 0 g8b.png 2.0
 printf "file 'c1.mp4'\nfile 'c2.mp4'\nfile 'c3.mp4'\nfile 'c4.mp4'\nfile 'c5.mp4'\nfile 'c6.mp4'\n" > cl.txt
 ffmpeg -v error -y -f concat -safe 0 -i cl.txt -c copy cv.mp4
