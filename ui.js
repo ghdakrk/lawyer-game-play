@@ -1516,6 +1516,7 @@ function optTab() {
     <textarea id="bug-text" rows="3" placeholder="예: 3-2에서 줄을 타다가 캐릭터가 벽에 끼었어요"></textarea>
     ${isChild() ? '<p class="note">만 14세 미만은 보호자에게 부탁해 보호자의 메일로 보내 주세요.</p>' : '<label class="note" style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="bug-ok" style="margin-top:3px"><span>(선택) 적은 내용과 함께 앱 버전·기기·화면 정보·진행 상황·최근 오류 기록을 운영자에게 보내는 데 동의합니다. 문제 확인에만 쓰고 처리가 끝나면 지웁니다. 동의하지 않아도 게임은 그대로 할 수 있어요.</span></label>'}
     <div class="row wrap">${isChild() ? '' : '<button class="btn sm" data-act="bugsend">메일로 제보 보내기</button>'}<button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
+  ${updateNote('data-act="update"')}
   <div class="card"><h3>프로토타입 정보</h3><p>v${GAME_VERSION}. 아트는 Higgsfield(GPT Image 2.5) 프레임 시트. 음악은 코드로 만든 칩튠. 저장은 이 브라우저에만 됩니다.</p>
   <p class="note"><a href="${PRIVACY_URL}" target="_blank" rel="noopener" style="color:var(--hl)">개인정보 처리방침</a> · <a href="${BUSINESS_URL}" target="_blank" rel="noopener" style="color:var(--hl)">사업자 정보</a></p>
   <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>
@@ -1539,6 +1540,31 @@ function bugReport(desc) {
 const BUG_MAIL = 'barbariankent@naver.com';
 const BUG_TAG = '[법조인키우기 버그]';   // 메일함에서 이 말머리로 분류(필터)
 function bugSubject() { return `${BUG_TAG} v${GAME_VERSION} · ${W && W.id ? W.id : scene} · ${jobName()} Lv.${S.lv}`; }
+// ---------- 테스트판 새 버전 알림 ----------
+// 테스터 사이트 version.json { web, apk } 과 지금 버전을 비교. 웹은 「새로고침」, 테스트 APK는 「받으러 가기」(android.html · 덮어 설치하면 저장 그대로)
+// 정식(스토어) 빌드는 끈다: 스토어 앱은 스토어로만 업데이트한다 (구글 플레이 정책)
+const TESTER_URL = 'https://ghdakrk.github.io/lawyer-game-play/';
+const verNum = (v) => (String(v).match(/\d+/g) || []).slice(0, 3).map(Number);
+function verNewer(a, b) { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; }
+let newVer = null, updAt = 0;
+async function checkUpdate() {
+  if (RELEASE || now() - updAt < 10 * 60 * 1000) return; updAt = now();
+  const app = Billing.native();
+  if (!app && /^(127\.|localhost$|\[::1\]$)/.test(location.hostname)) return;   // 로컬 검사·개발 서버
+  try {
+    const r = await fetch(`${TESTER_URL}version.json?t=${Date.now()}`, { cache: 'no-store' }); if (!r.ok) return;
+    const v = await r.json(), nv = app ? v.apk : v.web;
+    if (!nv || !verNewer(nv, GAME_VERSION) || (newVer && newVer.v === nv)) return;
+    newVer = { v: nv, app };
+    if (scene === 'title') { const sl = document.querySelector('#title .slots'); if (sl && !document.getElementById('t-upd')) sl.insertAdjacentHTML('beforebegin', updateNote('id="t-upd"')); } else toast(`새 테스트 버전이 나왔어요 (<b>v${esc(nv)}</b>) · 메뉴 → 설정에서 ${app ? '받기' : '새로고침'}`, 5000);
+  } catch (e) { /* 오프라인이면 다음에 */ }
+}
+const updateNote = (id) => (newVer ? `<div class="inapp-note">새 테스트 버전이 나왔어요 (<b>v${esc(newVer.v)}</b>) <button class="btn sm" ${id}>${newVer.app ? '받으러 가기' : '새로고침'}</button>${newVer.app ? '<br><span class="note">받은 파일을 설치하면 덮어써져요 · 저장은 그대로</span>' : ''}</div>` : '');
+function doUpdate() {
+  if (!newVer) return;
+  if (!newVer.app) { location.reload(); return; }
+  const a = document.createElement('a'); a.href = `${TESTER_URL}android.html`; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+}
 function openMail(to, subject, body) {
   if (body.length > 1800) body = body.slice(0, 1800) + '\n…(길어서 잘림)';   // 일부 메일 앱은 너무 긴 링크를 자른다
   const a = document.createElement('a'); a.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -1792,6 +1818,7 @@ function onSheetClick(ev) {
     skArm = false; if (S.inji < 200) return; S.inji -= 200; const r = refundSkills(() => true); ensureLoadout(); S.spSeen = 0; updateBadges();
     toast(`스킬 초기화 · SP ${r.sp} · ₩${fmt(r.gold)} 환급`, 4000); SFX.play('level'); refreshSheet(); save();
   }
+  else if (a === 'update') doUpdate();
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
   else if (a === 'toshop') openMenu('shop');
@@ -1890,7 +1917,7 @@ function showTitle() {
   const acc = accLoad(), got = ENDING_IDS.filter((id) => acc.endings[id]).length;
   t.innerHTML = `<div class="heroes"><img src="${heroes[0]}" alt=""><img src="${heroes[1]}" alt=""><img src="assets/npc_haechi.png" alt="" style="height:clamp(40px,10vw,74px)"><img src="${heroes[2]}" alt=""><img src="${heroes[3]}" alt=""></div>
     <h1>법조인 키우기</h1><p class="sub">로스쿨 서바이벌 · 끝까지 살아남아라</p>
-    ${inAppNote()}
+    ${inAppNote()}${updateNote('id="t-upd"')}
     <div class="slots">${Array.from({ length: slotCount() }, (_, i) => slotCard(i + 1)).join('')}</div>
     <div class="row wrap" style="justify-content:center"><button class="btn ghost sm" id="t-ends">엔딩 도감 ${got}/${ENDING_IDS.length}</button></div>
     <p class="note">슬롯마다 다른 직업으로 키워 보세요. 엔딩은 슬롯을 넘어 모입니다. · 전부 무료 · 현직 변호사가 만든 법조인 성장 액션 RPG · v${GAME_VERSION} · 버그 제보: 메뉴 → 설정</p>`;
@@ -1904,6 +1931,7 @@ function showTitle() {
     else if (b.dataset.slotDel) { const n = +b.dataset.slotDel; if (slotArm === n) { deleteSlot(n); slotArm = 0; } else { slotArm = n; setTimeout(() => { if (slotArm === n && scene === 'title') { slotArm = 0; showTitle(); } }, 3000); } showTitle(); }
     else if (b.id === 't-ends') endingGallery();
     else if (b.id === 't-ext') openExternal();
+    else if (b.id === 't-upd') doUpdate();
   };
 }
 // 엔딩: 대사 → 일러스트 카드. 슬롯에는 본 엔딩, 계정에는 모은 엔딩
@@ -2033,14 +2061,14 @@ function init() {
   window.addEventListener('resize', layout); window.addEventListener('orientationchange', () => setTimeout(layout, 200));
   document.addEventListener('visibilitychange', () => {   // 홈으로 나가면 저장하고 소리를 멈춘다 (앱에서 백그라운드 재생 방지)
     if (document.hidden) { save(); if (BGM.el) BGM.el.pause(); if (SFX.ctx && SFX.ctx.state === 'running') SFX.ctx.suspend(); }
-    else { if (BGM.el && BGM.on) BGM.el.play().catch(() => { }); if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); }
+    else { if (BGM.el && BGM.on) BGM.el.play().catch(() => { }); if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume(); checkUpdate(); }
   });
   appHooks();
   setInterval(() => { if (S.major) { save(); monthlyTick(); } }, 10000);
   layout();
   $('#b-hp').insertAdjacentHTML('afterbegin', `<span class="ic" style="${iconStyle('loot', LOOT.gimbap)};width:26px;height:26px;background-size:400% 300%;display:block"></span>`);
   loadAssets((f) => { const el = $('#loading'); if (el) el.textContent = `사건 기록을 불러오는 중… ${Math.round(f * 100)}%`; }).then(() => {
-    $('#loading').remove(); showTitle(); requestAnimationFrame(frame);
+    $('#loading').remove(); showTitle(); requestAnimationFrame(frame); checkUpdate();
     if (window.location.hash.startsWith('#mig=')) importMigration(window.location.hash.slice(5)).then(() => { if (scene === 'title') showTitle(); });   // 카카오톡에서 넘어온 세이브
   });
 }
