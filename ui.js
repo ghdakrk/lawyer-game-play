@@ -34,7 +34,20 @@ function reqWhy(r) {
   if (r.law) for (const [k, v] of Object.entries(r.law)) if (S.law[k] < v) out.push(`${LAWS.find((l) => l.id === k).name} ${S.law[k]}/${v}`);
   return out.join(' · ');
 }
-const questAvail = (q) => !S.q[q.id] && reqOk(q.req);
+// 묶음(grp) 퀘스트는 하나만: 2차 전직(변호사·검사·판사의 길) 중 하나를 받으면 나머지는 그걸 포기해야 받을 수 있다
+const grpBusy = (q) => (q.grp ? QUESTS.find((o) => o.grp === q.grp && o.id !== q.id && qState(o.id) === 'active') : null);
+const questAvail = (q) => !S.q[q.id] && reqOk(q.req) && !grpBusy(q);
+const questGrpLocked = (q) => !S.q[q.id] && reqOk(q.req) && grpBusy(q);
+// 포기: 메인 스토리(자동으로 이어지는 것)는 못 버린다. 모은 퀘스트 물건은 남는다
+const canQuit = (q) => qState(q.id) === 'active' && q.type !== 'main' && !q.auto;
+let quitArm = null;
+function quitQuest(q) {
+  if (!canQuit(q)) return;
+  delete S.q[q.id]; quitArm = null;
+  SFX.play('deny'); toast(`퀘스트 포기: <b>${esc(q.title)}</b> · ${esc(NPCS[q.giver].name)}에게 다시 받을 수 있어요`, 3800);
+  refreshQuestUI(); if (scene === 'town') rebuildNpcs(); updateBadges(); save();
+}
+const quitBtn = (q) => (canQuit(q) ? `<button class="btn ${quitArm === q.id ? 'red' : 'ghost'} sm" data-quit="${q.id}">${quitArm === q.id ? '한 번 더 누르면 포기' : '포기'}</button>` : '');
 const questLockedVisible = (q) => !S.q[q.id] && q.type !== 'hidden' && q.req && q.req.q && q.req.q.length > 0 && reqOk(q.req, true) && !reqOk(q.req);
 const stageLabel = (st) => { const { c, s } = parseSid(st); return `${c}-${s} ${CHAPTERS[c - 1].stages[s - 1]}`; };
 function goalProg(q, g) {
@@ -83,6 +96,7 @@ function questDrops(src, from) {
 }
 function acceptQuest(q, silent) {
   if (S.q[q.id]) return;
+  const busy = grpBusy(q); if (busy) { if (!silent) toast(`「${esc(busy.title)}」 퀘스트 진행 중 · 그 퀘스트를 포기해야 다른 전직 퀘스트를 받을 수 있어요`, 3800); return; }
   S.q[q.id] = { st: 'active', prog: {} };
   SFX.play('quest');
   if (!silent) toast(`퀘스트 수락: <b>${esc(q.title)}</b>`);
@@ -264,12 +278,14 @@ const NPC_CHAT = {
 };
 function npcSheet(id) {
   const n = NPCS[id]; const qs = QUESTS.filter((q) => q.giver === id);
-  const rows = [];
+  const qRows = () => { const rows = [];
   for (const q of qs) {
     if (questAvail(q)) rows.push(`<button class="choice q" data-acc="${q.id}"><span class="mk y">!</span><span><span class="t">${esc(q.title)}</span><br><span class="d">${qTypeName(q.type)} · 수락하기</span></span></button>`);
-    else if (qState(q.id) === 'active') rows.push(`<div class="choice q"><span class="mk g">…</span><span><span class="t">${esc(q.title)}</span><br><span class="d">${q.goals.map((g) => esc(goalText(q, g))).join(' · ')}</span></span></div>`);
+    else if (qState(q.id) === 'active') rows.push(`<div class="choice q${canQuit(q) ? ' qa' : ''}"><span class="mk g">…</span><span><span class="t">${esc(q.title)}</span><br><span class="d">${q.goals.map((g) => esc(goalText(q, g))).join(' · ')}</span></span>${quitBtn(q)}</div>`);
+    else if (questGrpLocked(q)) rows.push(`<div class="choice q" style="opacity:.6"><span class="mk">!</span><span><span class="t">${esc(q.title)}</span><br><span class="d">「${esc(grpBusy(q).title)}」 진행 중 · 그걸 포기하면 받을 수 있어요</span></span></div>`);
     else if (questLockedVisible(q)) rows.push(`<div class="choice q" style="opacity:.6"><span class="mk">!</span><span><span class="t">${esc(q.title)}</span><br><span class="d">조건: ${esc(reqWhy(q.req))}</span></span></div>`);
   }
+  return rows; };
   const fnBtns = [];
   if (id === 'haechi') { fnBtns.push('<button class="btn" data-act="jobs">진로 상담</button>', '<button class="btn ghost" data-act="skills">스킬 배우기</button>'); }
   if (n.fn === 'food') fnBtns.push('<button class="btn" data-act="food">김밥집 메뉴</button>');
@@ -277,10 +293,11 @@ function npcSheet(id) {
   if (n.fn === 'board') fnBtns.push('<button class="btn" data-act="board">사건 고르기</button>');
   if (NPC_CHAT[id] || NPC_TRIVIA[id]) fnBtns.push('<button class="btn ghost" data-act="chat">이야기</button>');
   const src = n.img ? `assets/${n.img}.png` : n.f != null ? frameURL('atlas_npc', 'npc', n.f) : n.comp ? compPortrait(n.comp) : '';
-  openSheet(n.name, [], () => `
-    <div class="card"><div class="row" style="gap:10px">${src ? `<img src="${src}" alt="" style="width:64px;height:72px;object-fit:contain">` : ''}<p>${esc(NPC_CHAT[id] ? NPC_CHAT[id]() : '무슨 일이에요?')}</p></div></div>
+  const chat = esc(NPC_CHAT[id] ? NPC_CHAT[id]() : '무슨 일이에요?');
+  openSheet(n.name, [], () => { const rows = qRows(); return `
+    <div class="card"><div class="row" style="gap:10px">${src ? `<img src="${src}" alt="" style="width:64px;height:72px;object-fit:contain">` : ''}<p>${chat}</p></div></div>
     ${rows.length ? `<div class="choices">${rows.join('')}</div>` : ''}
-    ${fnBtns.length ? `<div class="row wrap">${fnBtns.join('')}</div>` : ''}`, null, 'npc');
+    ${fnBtns.length ? `<div class="row wrap">${fnBtns.join('')}</div>` : ''}`; }, null, 'npc');
   sheetNpc = id;
 }
 let sheetNpc = null;
@@ -1238,15 +1255,15 @@ function cosTab() {
 function sellPrice(it) { return Math.round((20 + it.ilv * 6) * GRADE_MULT[it.grade] * GRADE_MULT[it.grade] * (1 + 0.3 * (it.en || 0))); }
 function questTab() {
   const act = QUESTS.filter((q) => qState(q.id) === 'active');
-  const av = QUESTS.filter(questAvail);
+  const av = QUESTS.filter(questAvail), gl = QUESTS.filter(questGrpLocked);
   const done = QUESTS.filter((q) => qDone(q.id)).length;
   ensureDaily();
   const card = (q) => `<div class="qcard ${q.type} ${questReady(q) ? 'ready' : ''}"><div class="row between"><b>${esc(q.title)}</b><span class="tag ${q.type}">${qTypeName(q.type)}</span></div>
     ${q.goals.map((g) => { const [c, n] = goalProg(q, g); return `<div class="goal ${c >= n ? 'ok' : ''}">${c >= n ? '✔' : '·'} ${esc(goalText(q, g))}</div>`; }).join('')}
-    <span class="note">${questReady(q) ? `완료! ${esc(NPCS[q.giver].name)}에게 보고하세요` : `의뢰인: ${esc(NPCS[q.giver].name)}`}${q.drops ? ` · 드롭: ${q.drops.map((d) => `${d.ch.join('·')}장${d.from === 'elite' ? ' 정예' : d.from === 'safe' ? ' 금고' : ''}`).join(', ')}` : ''}</span></div>`;
+    <div class="row between" style="gap:6px"><span class="note">${questReady(q) ? `완료! ${esc(NPCS[q.giver].name)}에게 보고하세요` : `의뢰인: ${esc(NPCS[q.giver].name)}`}${q.drops ? ` · 드롭: ${q.drops.map((d) => `${d.ch.join('·')}장${d.from === 'elite' ? ' 정예' : d.from === 'safe' ? ' 금고' : ''}`).join(', ')}` : ''}</span>${questReady(q) ? '' : quitBtn(q)}</div></div>`;
   return `
   <div class="card"><h3>진행 중 <span class="note">${act.length}</span></h3>${act.length ? act.map(card).join('') : '<p>진행 중인 퀘스트가 없습니다.</p>'}</div>
-  <div class="card"><h3>받을 수 있는 퀘스트 <span class="note">${av.length}</span></h3>${av.length ? av.map((q) => `<div class="row between"><span><b>${esc(q.title)}</b> <span class="tag ${q.type}">${qTypeName(q.type)}</span></span><span class="note">마을 · ${esc(NPCS[q.giver].name)}</span></div>`).join('') : '<p>지금은 없습니다. 이야기를 진행하면 늘어납니다.</p>'}</div>
+  <div class="card"><h3>받을 수 있는 퀘스트 <span class="note">${av.length}</span></h3>${av.length ? av.map((q) => `<div class="row between"><span><b>${esc(q.title)}</b> <span class="tag ${q.type}">${qTypeName(q.type)}</span></span><span class="note">마을 · ${esc(NPCS[q.giver].name)}</span></div>`).join('') : '<p>지금은 없습니다. 이야기를 진행하면 늘어납니다.</p>'}${gl.length ? `<p class="note">전직 퀘스트는 한 번에 하나만: ${gl.map((q) => esc(q.title)).join(' · ')}는 「${esc(grpBusy(gl[0]).title)}」를 포기하면 받을 수 있어요.</p>` : ''}</div>
   <div class="card"><h3>오늘의 의뢰 <span class="note">사건 게시판</span></h3>${S.daily.list.length ? S.daily.list.map((d) => `<div class="row between"><span>${esc(MOBS[d.m].name)} ${d.prog}/${d.n}</span><span class="note">${d.claimed ? '보상 받음' : `₩${fmt(d.gold)} · 인지 ${d.inji}`}</span></div>`).join('') : '<p>1장을 시작하면 열립니다.</p>'}</div>
   <p class="note">완료한 퀘스트 ${done} / ${QUESTS.length} · 의뢰인 퀘스트 ${clientDone()}</p>`;
 }
@@ -1739,6 +1756,11 @@ function onSheetClick(ev) {
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
   if (d.acc) { const q = QMAP[d.acc]; closeSheet(); acceptQuest(q); return; }
+  if (d.quit) {   // 두 번 눌러 확정
+    const q = QMAP[d.quit]; if (!q) return;
+    if (quitArm !== q.id) { quitArm = q.id; setTimeout(() => { if (quitArm === q.id) { quitArm = null; if (sheetRender) refreshSheet(); } }, 3000); refreshSheet(); return; }
+    quitQuest(q); refreshSheet(); return;
+  }
   if (d.learn) { const sk = SKILLS[d.learn], L = sk.learn; if (S.lv < L.lv || !S.books[L.book] || S.gold < L.gold) return; S.books[L.book]--; S.gold -= L.gold; S.skl[d.learn] = 1; ensureLoadout(); SFX.play('level'); showBanner('스킬 습득', sk.name); updateBadges(); refreshSheet(); return; }
   if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold || skillLv(d.skup) >= skillCap(d.skup)) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; { const L = S.skl[d.skup], ev = SKILL_EVO[d.skup] || [], nm = SKILLS[d.skup].name; if (L === 5) showBanner('스킬 강화!', `${nm} · ${ev[0] || ''}`); else if (L === 7) showBanner('스킬 각성!', `${nm} · 새 기능: ${ev[1] || ''}`); else if (L === 10) showBanner('스킬 마스터!', `${nm} · 재사용·커피 −20%`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
   if (d.party) { const id = d.party; if (S.party.includes(id)) S.party = S.party.filter((x) => x !== id); else if (S.party.length < S.slots) S.party.push(id); statCache = null; if (W && W.kind === 'stage') buildAllies(); refreshSheet(); return; }
@@ -2032,7 +2054,7 @@ if (!RELEASE) window.__game = {
   giveRewards, checkPassives, ensureLoadout, showGuide, closeGuide, guideOpen, cosGacha, giveCos, badgeState, get cam() { return cam; }, BGM,
   enterSurvival, learnTrivia, expel, routeSheet, jobSheet, survivalResults, playerPose, navEdges, navTo,
   playEnding, endingSheet, endingGallery, showTitle, returnTown, retrial, slotCount, load, readSlot, accLoad, get SLOT() { return SLOT; }, set SLOT(v) { SLOT = v; }, mobLevel,
-  transferJob, fixJobQuests, reqOk, refreshSheet, purchase, claimStarter, ageGate, get ageMode() { return ageMode; }, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick, heroPreview, poseOf,
+  transferJob, fixJobQuests, reqOk, refreshSheet, quitQuest, grpBusy, purchase, claimStarter, ageGate, get ageMode() { return ageMode; }, owns, applyOwned, grandfather, makeLegend, makeItem, autoEquipIfBetter, damageMob, enterKakha, skillCap, refundSkills, revive, playerDied, packSaves, importMigration, buyInji, buyMonthly, monthlyTick, heroPreview, poseOf,
 };
 const start = (data) => { hotData = data || null; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); };
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});
