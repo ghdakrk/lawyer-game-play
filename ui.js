@@ -1481,6 +1481,7 @@ function optTab() {
     ${isChild() ? '<p class="note">만 14세 미만은 보호자에게 부탁해 보호자의 메일로 보내 주세요.</p>' : '<label class="note" style="display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="bug-ok" style="margin-top:3px"><span>(선택) 적은 내용과 함께 앱 버전·기기·화면 정보·진행 상황·최근 오류 기록을 운영자에게 보내는 데 동의합니다. 문제 확인에만 쓰고 처리가 끝나면 지웁니다. 동의하지 않아도 게임은 그대로 할 수 있어요.</span></label>'}
     <div class="row wrap">${isChild() ? '' : '<button class="btn sm" data-act="bugsend">메일로 제보 보내기</button>'}<button class="btn ghost sm" data-act="savefile">세이브 파일 저장</button>${isKakao() ? '<button class="btn sm" data-act="openext">크롬·사파리로 옮기기</button>' : ''}<label class="btn ghost sm">세이브 불러오기<input type="file" accept=".json,application/json" id="save-in" hidden></label></div></div>
   <div class="card"><h3>프로토타입 정보</h3><p>v${GAME_VERSION}. 아트는 Higgsfield(GPT Image 2.5) 프레임 시트. 음악은 코드로 만든 칩튠. 저장은 이 브라우저에만 됩니다.</p>
+  <p class="note"><a href="${PRIVACY_URL}" target="_blank" rel="noopener" style="color:var(--hl)">개인정보 처리방침</a> · <a href="${BUSINESS_URL}" target="_blank" rel="noopener" style="color:var(--hl)">사업자 정보</a></p>
   <div class="row wrap"><button class="btn ghost sm" data-act="totitle">타이틀로</button><button class="btn red sm" data-act="reset">이 슬롯 지우기</button></div></div>
   <div class="card"><h3>계정·데이터 삭제</h3><p class="note">이 기기의 모든 슬롯·엔딩 도감·구매 기록·설정을 지웁니다. 되돌릴 수 없어요. 영구 상품은 같은 스토어 계정으로 「구매 복원」하면 다시 받을 수 있지만, 진행과 인지 잔액은 복구되지 않습니다. <a href="${PRIVACY_URL}#delete" target="_blank" rel="noopener" style="color:var(--hl)">개인정보 처리방침</a> 제9조.</p>
     <button class="btn red sm" data-act="wipe">${wipeArm ? '정말 모두 삭제 (되돌릴 수 없음)' : '계정·데이터 삭제'}</button></div>`;
@@ -1825,6 +1826,7 @@ function slotCard(n) {
 function firstEmptySlot() { for (let n = 1; n <= slotCount(); n++) if (!readSlot(n)) return n; return 0; }
 function firstFullSlot() { for (let n = 1; n <= slotCount(); n++) if (readSlot(n)) return n; return 0; }
 const PRIVACY_URL = 'https://ghdakrk.github.io/lawyer-game-play/privacy.html';
+const BUSINESS_URL = 'https://ghdakrk.github.io/lawyer-game-play/business.html';   // 전자상거래법 사업자 정보
 // 처음 실행: 연령 확인 (만 14세 미만이면 기기 저장 모드). 자동 테스트(webdriver)에서는 건너뛴다
 function ageGate(next) {
   const old = document.getElementById('agegate'); if (old) old.remove();
