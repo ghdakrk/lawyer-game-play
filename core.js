@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.10-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.11-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -1395,9 +1395,12 @@ function autoPilot() {
   else if (!flyer && !t.boss && Math.abs(dy) > 40 && t.onGround) { navTo(t.x, t.y, t.plat); return; }
   const want = b.k === 'shot' ? Math.min(b.dist * 0.7, 200) : b.k === 'lash' ? b.range * 0.75 : b.k === 'wave' ? Math.min(b.dist * 0.8, 120) : b.range * 0.75 + t.w * 0.3;
   const keepAway = b.k === 'shot' ? 90 : 0;
+  // 물러서기는 뒤가 비었을 때만, 1.5초까지. 양옆에 적이 있으면 그 자리에서 쏜다 (예전: 같은 층 양쪽 리치 사이에서 왔다 갔다만 하고 한 발도 안 쐈다)
+  const behind = targets.some((m) => m !== t && Math.abs(m.y - p.y) < 40 && (m.x - p.x) * dx < 0 && Math.abs(m.x - p.x) < keepAway + 40);
+  if (Math.abs(dx) >= keepAway + 10) p.kiteT = 0;
   if (aimUp) { /* 제자리에서 비스듬히 쏜다 */ }
   else if (Math.abs(dx) > want) keys[dx > 0 ? 'right' : 'left'] = true;
-  else if (Math.abs(dx) < keepAway && (!W.lock || (dx > 0 ? p.x - W.lock[0] > 60 : W.lock[1] - p.x > 60))) keys[dx > 0 ? 'left' : 'right'] = true;
+  else if (Math.abs(dx) < keepAway && !behind && (p.kiteT = (p.kiteT || 0) + 1 / 60) < 1.5 && (!W.lock || (dx > 0 ? p.x - W.lock[0] > 60 : W.lock[1] - p.x > 60))) keys[dx > 0 ? 'left' : 'right'] = true;
   else { p.face = dx > 0 ? 1 : -1; if (p.atkT <= 0) pressed.attack = true; }
   if (autoDodge(p, targets)) return;
   if (W.fx.some((f) => f.k === 'countdown') && p.onGround && p.y >= GROUND - 1) { const pl = W.platforms.slice().sort((a, c) => Math.abs(a.x + a.w / 2 - p.x) - Math.abs(c.x + c.w / 2 - p.x))[0]; if (pl) { keys.left = keys.right = false; const cx = pl.x + pl.w / 2; if (Math.abs(cx - p.x) > 20) keys[cx > p.x ? 'right' : 'left'] = true; else pressed.jump = true; } }
