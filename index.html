@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.8-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.9-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -48,7 +48,7 @@ html, body { height: 100%; }
 @supports (height: 100dvh) { html, body { height: 100dvh; } }   /* 브라우저 아래 막대에 가리지 않게 실제로 보이는 높이 */
 body { background: var(--ink); color: var(--fg); font-family: var(--font-body); font-size: 15px; overflow: hidden; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
 button { font: inherit; color: inherit; }
-#app { position: relative; height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); display: flex; flex-direction: column; background: #070910; max-width: 1100px; margin: 0 auto; }
+#app { position: relative; height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); display: flex; flex-direction: column; background: #070910; margin: 0 auto; }   /* 폭 제한 없음: 큰 화면은 배율로 맵을 넓게 보여 준다 (layout) */
 #view { position: relative; width: 100%; background: #000; flex: none; touch-action: none; }
 #game { display: block; width: 100%; height: 100%; image-rendering: auto; }
 /* HUD */
@@ -137,7 +137,7 @@ button { font: inherit; color: inherit; }
 #app.land #stickhint { opacity: .45; width: 84px; }
 #app.land #keys { display: none; }
 #app.land.dlg #skills, #app.land.dlg #acts, #app.land.dlg #stickhint { visibility: hidden; }
-#app.land #dialog { bottom: calc(8px + var(--sb)); }
+#app.land #dialog { bottom: calc(8px + var(--sb)); max-width: 1000px; margin: 0 auto; }   /* 넓은 화면에서 대화창이 끝없이 늘어나지 않게 */
 /* sheet (menus) */
 #sheet { position: absolute; inset: 0; background: rgba(5,7,16,.78); display: none; align-items: flex-end; justify-content: center; z-index: 20; }
 #sheet.show { display: flex; }

@@ -381,7 +381,17 @@ function drawAnim(an, key, fi, x, y, h, o = {}) {
   if (o.alpha != null) ctx.globalAlpha *= o.alpha;
   const dx = -w / 2, dy = -(meta.ch - 3) * k;
   if (o.tint) drawTinted(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh, o.tint);
-  else {
+  else if (o.nod) {   // 몸은 그대로, 머리 칸만 턱 밑을 축으로 숙여 그린다
+    const n = o.nod, ov = n.u * 0.12;
+    if (o.glow && !gfxLevel) { ctx.shadowColor = o.glow; ctx.shadowBlur = 12; }
+    ctx.save(); ctx.beginPath(); ctx.rect(dx, dy, w, hh); ctx.rect(dx + n.x0 * k, dy, (n.x1 - n.x0) * k, n.py * k); ctx.clip('evenodd');
+    ctx.drawImage(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh); ctx.restore();
+    ctx.save(); const px = dx + n.px * k, py = dy + n.py * k;
+    ctx.translate(px, py); ctx.rotate(n.a); ctx.translate(-px, -py);
+    ctx.beginPath(); ctx.rect(dx + n.x0 * k, dy, (n.x1 - n.x0) * k, (n.py + ov) * k); ctx.clip();
+    ctx.drawImage(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh); ctx.restore();
+    ctx.shadowBlur = 0;
+  } else {
     if (o.glow && !gfxLevel) { ctx.shadowColor = o.glow; ctx.shadowBlur = 12; }
     ctx.drawImage(img, sx, sy, meta.cw, meta.ch, dx, dy, w, hh);
     ctx.shadowBlur = 0;
@@ -432,11 +442,11 @@ function render() {
 }
 // 화면 위·아래로 벗어난 몬스터: ▲·▼ 표시 (위층 저격수 찾기)
 function drawOffscreenMarks() {
-  const top = cam.y + 4, bot = cam.y + VH - 30;
+  const top = cam.y - offY / scale + 4, bot = cam.y + VH - 30;   // 큰 화면은 위가 더 보인다
   for (const m of W.mobs) {
     if (m.dead || m.fake) continue;
     const up = m.y - m.h * 0.5 < top, down = m.y - m.h * 0.5 > bot; if (!up && !down) continue;
-    const x = clamp(m.x - cam.x, 16, viewW - 16), y = up ? 16 : VH - 44;
+    const x = clamp(m.x - cam.x, 16, viewW - 16), y = up ? 16 - offY / scale : VH - 44;
     const a = 0.65 + 0.35 * Math.sin(performance.now() / 150);
     ctx.globalAlpha = a; drawText(up ? '▲' : '▼', x, y, 14, m.elite ? '#ffb84d' : '#ff6b5c'); ctx.globalAlpha = 1;
   }
@@ -570,8 +580,16 @@ function drawFigure(pose, x, y, h, face, o = {}) {
   if (o.aura) drawAura(x, y, h, t);
   const cos = !o.rot && (S.equip.head || S.equip.back);
   if (cos) drawCos('under', pose, x, y, h, face, t, o);
-  drawAnim(pose.an, pose.key, pose.fi, x, y, h, { flip: face < 0, sx: o.sx, sy: o.sy, rot: o.rot, glow: o.glow });
+  drawAnim(pose.an, pose.key, pose.fi, x, y, h, { flip: face < 0, sx: o.sx, sy: o.sy, rot: o.rot, glow: o.glow, nod: o.rot ? null : nodOf(pose) });
   if (cos) drawCos('over', pose, x, y, h, face, t, o);
+}
+// 걷기 시트는 고개가 들려 있어 하늘을 보며 걷는 것처럼 보인다 → 머리만 앞으로 숙인다 (턱 밑 = 축)
+const NOD = 0.16;
+function nodOf(pose) {
+  if (!pose.loco || pose.back) return null;
+  const G = HEADG[`${pose.an}/${pose.key}`], g = G && G[pose.fi]; if (!g) return null;
+  const [X, , U, , , , fb] = g;
+  return { a: NOD, px: X, py: fb, u: U, x0: X - U * 0.62, x1: X + U * 0.62 };
 }
 function bestGrade() { let g = -1; for (const k of ['weapon', 'armor', 'acc', 'gear']) { const it = S.inv.find((x) => x.uid === S.equip[k]); if (it) g = Math.max(g, it.grade + Math.floor((it.en || 0) / 5)); } return Math.min(4, g); }
 function drawAura(x, y, h, t) {
@@ -615,6 +633,7 @@ function drawCos(layer, pose, x, y, h, face, t, o = {}) {
     ctx.save();
     ctx.translate(x, y); ctx.scale(o.sx || 1, o.sy || 1);   // 착지할 때 찌그러짐도 따라간다
     ctx.translate(flip * (g.X - g.meta.cw / 2) * k, (g.T - (g.meta.ch - 3)) * k); ctx.scale(flip * k, k);
+    const nod = slot === 'head' && !o.rot && nodOf(pose); if (nod) { const py = nod.py - g.T; ctx.translate(0, py); ctx.rotate(nod.a); ctx.translate(0, -py); }   // 숙인 머리를 따라간다
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     if (c.proc === 'cape') drawCape(g, layer, cl, t);
     else if (c.proc === 'wig') drawWig(g, layer, cl, t);
@@ -1911,16 +1930,21 @@ function layout() {
   // 실제로 쓸 수 있는 크기 = #app 안쪽 (카메라 구멍 등 위쪽 안전 영역을 뺀다)
   const app = $('#app'), cs = window.getComputedStyle(app);
   document.documentElement.style.setProperty('--lift', `${ctrlLift}px`);
-  const ww = Math.min(app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), 1100), wh = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const ww = app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), wh = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   const land = ww / wh > 1.25;
   app.classList.toggle('land', land);
   const view = $('#view');
   const dpr = Math.min(gfxLevel >= 2 ? 1.25 : 2, window.devicePixelRatio || 1);
   const HUD = 46;
   let cssScale;
-  if (land) { view.style.height = '100%'; cssScale = wh / VH; }
-  else {   // 세로: 조작부(버튼 260 + 띄움 높이 + 아래 안전 영역)를 먼저 확보하고, 게임 화면은 남는 만큼. 모자라면 게임 화면을 줄인다
-    cssScale = clamp(ww / 330, 0.85, 1.8);
+  // 큰 화면(태블릿)일수록 캐릭터를 작게, 맵을 넓게 보여 준다. 폰(가로 높이 ~430 · 세로 폭 ~430 이하)은 그대로
+  if (land) {   // 보이는 높이: 폰 270 → 화면 높이 800 이상이면 1.5배. 가로는 720까지만 (전투 구역 폭이 너무 넓어지지 않게)
+    view.style.height = '100%';
+    const vhG = VH * clamp(1 + (wh - 420) / 380 * 0.5, 1, 1.5);
+    cssScale = Math.max(wh / vhG, ww / 720);
+  } else {   // 세로: 조작부(버튼 260 + 띄움 높이 + 아래 안전 영역)를 먼저 확보하고, 게임 화면은 남는 만큼. 모자라면 게임 화면을 줄인다
+    const vwG = 330 * clamp(1 + (ww - 430) / 370 * 0.6, 1, 1.6);
+    cssScale = clamp(ww / vwG, 0.85, 1.8);
     const vh = Math.round(Math.max(160, Math.min(Math.max(VH * cssScale + HUD, wh * 0.6), wh - 262 - ctrlLift - safeBottom())));
     cssScale = Math.min(cssScale, (vh - HUD) / VH); view.style.height = `${vh}px`;
   }
