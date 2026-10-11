@@ -30,7 +30,7 @@ const awakeOf = (id) => !!S.rank[id] || JOBS[id].tier >= 3;
 const basicAwake = () => awakeOf(S.job);
 function crossHit(face, r, dmg, col, big) {   // 근거리·사슬 각성: 첫 타 직후 반대 대각선으로 한 번 더 (따닥)
   const p = player;
-  later(0.07, () => {
+  fight(0.07, () => {
     if (!W || !player || p.dead || scene !== 'stage') return;
     W.fx.push({ k: 'cross', x: p.x + face * r * 0.55, y: p.y - 36, r: big ? 30 : 22, color: col, t: 0, dur: 0.26, w: big ? 9 : 6 });
     meleeBox(face, r, 66, dmg, { kb: big ? 120 : 40, color: col, ultMul: 0.5 });
@@ -98,7 +98,7 @@ function indict() {
   const face = p.face;
   W.fx.push({ k: 'slash', x: p.x + face * 10, y: p.y - 40, r: 100, face, color: '#ff3b2f', t: 0, dur: 0.26, combo: 3, w: 18, rot: -0.8 });
   SFX.play('swing');
-  later(0.12, () => {
+  fight(0.12, () => {
     if (!W || p.dead) return;
     const x = p.x + face * 48;
     W.fx.push({ k: 'indict', x, gy: p.y, t: 0, dur: 0.8 });
@@ -143,7 +143,7 @@ function castUlt() {
   const portrait = frameURL(j.anim[0], j.anim[1], HF.cast);
   W.cutin = { t: 0, dur: sk.awak ? 1.0 : 0.75, name: sk.name, color: j.color, an: j.anim, awak: !!sk.awak, job: jobName() };
   timeScale = 0.12; SFX.play('skill'); BGM.jingle(sk.awak ? 'job' : 'win');
-  later(sk.awak ? 0.9 : 0.65, () => {
+  fight(sk.awak ? 0.9 : 0.65, () => {
     if (!W || !player) return; timeScale = 1; W.cutin = null;
     SFX.play('boom'); cam.shake = 12; hitStop = 0.08;
     W.fx.push({ k: 'flash', t: 0, dur: 0.35, color: j.color });
@@ -177,12 +177,12 @@ const SK = {
     for (const off of lines) {
       const x0 = p.x + p.face * 20, x1 = p.x + p.face * 280, y = p.y + off;
       W.fx.push({ k: 'underline', x0, x1, y, t: 0, dur: 0.75, fuse: 0.45, color: '#ffe45c' });
-      later(0.45, () => { if (!W || scene !== 'stage') return; areaHit(x0, y - 60, x1, y + 16, dmg, { kb: 60, up: 160, color: '#ffe45c', props: true }); cam.shake = 6; SFX.play('zap'); for (let x = Math.min(x0, x1); x < Math.max(x0, x1); x += 18) fxSpark(x, y, '#ffe45c', 2); if (e >= 2) W.areas.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: y - 40, y1: y + 10, dmg: dmg * 0.2, every: 0.3, t: 0, next: 0.3, dur: 2, color: '#ffe45c', burn: true }); });
+      fight(0.45, () => { if (!W || scene !== 'stage') return; areaHit(x0, y - 60, x1, y + 16, dmg, { kb: 60, up: 160, color: '#ffe45c', props: true }); cam.shake = 6; SFX.play('zap'); for (let x = Math.min(x0, x1); x < Math.max(x0, x1); x += 18) fxSpark(x, y, '#ffe45c', 2); if (e >= 2) W.areas.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: y - 40, y1: y + 10, dmg: dmg * 0.2, every: 0.3, t: 0, next: 0.3, dur: 2, color: '#ffe45c', burn: true }); });
     }
   },
   st3(p, dmg, st, e) {
     const n = e ? 10 : 7; p.castT = 0.12 * n + 0.1;
-    for (let i = 0; i < n; i++) later(i * 0.1, () => { if (!W || p.dead) return; const last = i === n - 1; W.fx.push({ k: 'slash', x: p.x + p.face * 14, y: p.y - 30 - rand(-10, 10), r: last ? 90 : 70, face: p.face, color: last ? '#fff36b' : '#ffe45c', t: 0, dur: 0.14, combo: (i % 2) + 1, w: last ? 14 : 8, rot: rand(-0.5, 0.5) }); meleeBox(p.face, last ? 90 : 78, 70, dmg * (last ? 2.2 : 1), { kb: last ? 200 : 30, up: last ? 300 : 0, heavy: last, color: '#ffe45c' }); SFX.play('swing'); if (last && e >= 2) W.pprj.push({ k: 'pshock', x: p.x, y: GROUND - 8, vx: p.face * 360, vy: 0, r: 16, dmg: dmg * 2, pierce: 99, hit: new Set(), life: 0.9, color: '#ffe45c', ground: true, gy: p.y }); });
+    for (let i = 0; i < n; i++) fight(i * 0.1, () => { if (!W || p.dead) return; const last = i === n - 1; W.fx.push({ k: 'slash', x: p.x + p.face * 14, y: p.y - 30 - rand(-10, 10), r: last ? 90 : 70, face: p.face, color: last ? '#fff36b' : '#ffe45c', t: 0, dur: 0.14, combo: (i % 2) + 1, w: last ? 14 : 8, rot: rand(-0.5, 0.5) }); meleeBox(p.face, last ? 90 : 78, 70, dmg * (last ? 2.2 : 1), { kb: last ? 200 : 30, up: last ? 300 : 0, heavy: last, color: '#ffe45c' }); SFX.play('swing'); if (last && e >= 2) W.pprj.push({ k: 'pshock', x: p.x, y: GROUND - 8, vx: p.face * 360, vy: 0, r: 16, dmg: dmg * 2, pierce: 99, hit: new Set(), life: 0.9, color: '#ffe45c', ground: true, gy: p.y }); });
   },
   st_u(p, dmg) {
     for (let i = 0; i < 24; i++) W.pprj.push({ k: 'exam', x: cam.x + 10 + i * (viewW - 20) / 23 + rand(-6, 6), y: cam.y - 30 - rand(0, 200), vx: rand(-20, 20), vy: 260, r: 12, dmg: dmg * 0.9, pierce: 4, hit: new Set(), life: 3, rot: rand(0, 6), vr: rand(-4, 4), land: 'stampF' });
@@ -203,7 +203,7 @@ const SK = {
     let cur = first; let i = 0; const maxN = [6, 8, 10][e];
     while (cur && i < maxN) {
       const tgt = cur; const from = { ...src }; const to = { x: tgt.x, y: tgt.y - tgt.h * 0.5 };
-      later(i * 0.07, () => { if (!W) return; W.fx.push({ k: 'bolt', x0: from.x, y0: from.y, x1: to.x, y1: to.y, t: 0, dur: 0.3, color: '#ffe26b', seed: Math.random() }); damageMob(tgt, dmg, { stun: e >= 2 ? 1 : 0.4, color: '#ffe26b' }); SFX.play('zap'); });
+      fight(i * 0.07, () => { if (!W) return; W.fx.push({ k: 'bolt', x0: from.x, y0: from.y, x1: to.x, y1: to.y, t: 0, dur: 0.3, color: '#ffe26b', seed: Math.random() }); damageMob(tgt, dmg, { stun: e >= 2 ? 1 : 0.4, color: '#ffe26b' }); SFX.play('zap'); });
       hit.add(cur); src = to; i++;
       let nx = null, nd = 170; for (const m of liveMobs()) { if (m.fake || hit.has(m)) continue; const d = Math.hypot(m.x - to.x, (m.y - m.h / 2) - to.y); if (d < nd) { nd = d; nx = m; } }
       cur = nx;
@@ -225,7 +225,7 @@ const SK = {
   as3(p, dmg, st, e) {
     p.dashT = 0.14; p.dashV = -p.face * 480; p.castT = 0.4;
     const face = p.face, x0 = p.x, n = [6, 8, 10][e];
-    for (let i = 0; i < n; i++) later(0.12 + i * 0.08, () => { if (!W) return; W.pprj.push({ k: 'crate', x: x0 + face * (80 + i * (300 / n) * 1.0) + rand(-8, 8), y: cam.y - 10, vx: 0, vy: 520, r: 16, dmg, pierce: 99, hit: new Set(), life: 2.5, land: 'crate', rot: rand(-0.3, 0.3) }); });
+    for (let i = 0; i < n; i++) fight(0.12 + i * 0.08, () => { if (!W) return; W.pprj.push({ k: 'crate', x: x0 + face * (80 + i * (300 / n) * 1.0) + rand(-8, 8), y: cam.y - 10, vx: 0, vy: 520, r: 16, dmg, pierce: 99, hit: new Set(), life: 2.5, land: 'crate', rot: rand(-0.3, 0.3) }); });
   },
   as_u(p, dmg) {
     for (let w = 0; w < 3; w++) for (let i = 0; i < 9; i++) W.pprj.push({ k: 'brief', x: p.x, y: p.y - 34, vx: p.face * (300 + w * 70), vy: (i - 4) * 42, r: 10, dmg: dmg * 0.9, pierce: 4, hit: new Set(), life: 1.5 + w * 0.2, face: p.face, delay: w * 0.16, tr: [] });
@@ -239,7 +239,7 @@ const SK = {
     p.dashT = 0.3 * (e ? 1.25 : 1); p.dashV = p.face * 560; p.castT = 0.34;
     W.areas.push({ follow: true, ox0: 0, ox1: 46, y0: -64, y1: 0, dmg: dmg * 0.5, once: true, hit: new Set(), dur: p.dashT + 0.02, t: 0, grab: true, color: '#ff6b5c' });
     const slam = () => { circleHit(p.x + p.face * 30, p.y - 30, 70, dmg, { kb: 220, up: 200, heavy: true, color: '#ff6b5c', props: true }); fxRing(p.x + p.face * 30, p.y - 6, 70, '#ff6b5c'); fxShockDust(p.x + p.face * 30, p.y); cam.shake = 8; SFX.play('boom'); };
-    p.onDashEnd = () => { slam(); if (e >= 2) later(0.25, () => { if (W) slam(); }); };
+    p.onDashEnd = () => { slam(); if (e >= 2) fight(0.25, () => { if (W) slam(); }); };
   },
   pr2(p, dmg, st, e) {
     const angs = [[0], [0.18, -0.18], [0.3, 0, -0.3]][e];
@@ -250,20 +250,20 @@ const SK = {
     const slams = e >= 2 ? 3 : 1; p.castT = 0.4 + slams * 0.3;
     meleeBox(p.face, 74, 80, dmg * 0.6, { kb: 40, up: 380, color: '#ff6b5c' });
     W.fx.push({ k: 'slash', x: p.x + p.face * 14, y: p.y - 40, r: 76, face: p.face, color: '#ff6b5c', t: 0, dur: 0.22, combo: 2, w: 14, rot: -0.9 });
-    for (let k = 0; k < slams; k++) later(0.38 + k * 0.3, () => { if (!W) return; for (const dir of [-1, 1]) W.pprj.push({ k: 'pshock', x: p.x, y: GROUND - 8, vx: dir * 300, vy: 0, r: e ? 20 : 14, dmg, pierce: 99, hit: new Set(), life: 1.0, color: '#ff6b5c', ground: true, gy: p.y }); circleHit(p.x, p.y - 20, 60 + (e ? 20 : 0), dmg, { kb: 150, heavy: true, color: '#ff6b5c' }); fxRing(p.x, p.y - 4, 90, '#ff6b5c'); fxShockDust(p.x, p.y); cam.shake = 10; SFX.play('boom'); });
+    for (let k = 0; k < slams; k++) fight(0.38 + k * 0.3, () => { if (!W) return; for (const dir of [-1, 1]) W.pprj.push({ k: 'pshock', x: p.x, y: GROUND - 8, vx: dir * 300, vy: 0, r: e ? 20 : 14, dmg, pierce: 99, hit: new Set(), life: 1.0, color: '#ff6b5c', ground: true, gy: p.y }); circleHit(p.x, p.y - 20, 60 + (e ? 20 : 0), dmg, { kb: 150, heavy: true, color: '#ff6b5c' }); fxRing(p.x, p.y - 4, 90, '#ff6b5c'); fxShockDust(p.x, p.y); cam.shake = 10; SFX.play('boom'); });
   },
   pr_u(p, dmg) {
     const cx = cam.x + viewW / 2;
     W.fx.push({ k: 'bigstamp', x: cx, t: 0, dur: 1.1, hitAt: 0.38, gy: p.y });
-    later(0.38, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 2.2, { stun: 3.5, color: '#ff6b5c', quiet: true }); W.fx.push({ k: 'flash', t: 0, dur: 0.4, color: '#ff3b2f' }); cam.shake = 14; SFX.play('boom'); });
+    fight(0.38, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 2.2, { stun: 3.5, color: '#ff6b5c', quiet: true }); W.fx.push({ k: 'flash', t: 0, dur: 0.4, color: '#ff3b2f' }); cam.shake = 14; SFX.play('boom'); });
   },
   pr_u2(p, dmg) {
     for (let k = 0; k < 3; k++) {
       const cx = cam.x + viewW * (0.25 + k * 0.25);
-      later(k * 0.35, () => { if (!W) return; W.fx.push({ k: 'bigstamp', x: cx, t: 0, dur: 1.0, hitAt: 0.32, gy: p.y }); });
-      later(k * 0.35 + 0.32, () => { if (!W) return; for (const m of visibleMobs()) if (Math.abs(m.x - cx) < 180) damageMob(m, dmg * 1.4, { stun: 2.5, color: '#ff6b5c', quiet: true }); cam.shake = 14; SFX.play('boom'); });
+      fight(k * 0.35, () => { if (!W) return; W.fx.push({ k: 'bigstamp', x: cx, t: 0, dur: 1.0, hitAt: 0.32, gy: p.y }); });
+      fight(k * 0.35 + 0.32, () => { if (!W) return; for (const m of visibleMobs()) if (Math.abs(m.x - cx) < 180) damageMob(m, dmg * 1.4, { stun: 2.5, color: '#ff6b5c', quiet: true }); cam.shake = 14; SFX.play('boom'); });
     }
-    later(1.15, () => { if (!W) return; const vis = visibleMobs(); for (const m of vis) W.fx.push({ k: 'skychain', x: m.x, y: m.y - m.h / 2, t: 0, dur: 1.2 }); later(0.4, () => { if (W) for (const m of vis) damageMob(m, dmg, { stun: 4, color: '#d9e2ff', quiet: true }); }); });
+    fight(1.15, () => { if (!W) return; const vis = visibleMobs(); for (const m of vis) W.fx.push({ k: 'skychain', x: m.x, y: m.y - m.h / 2, t: 0, dur: 1.2 }); fight(0.4, () => { if (W) for (const m of vis) damageMob(m, dmg, { stun: 4, color: '#d9e2ff', quiet: true }); }); });
   },
   // ---------------- 판사 ----------------
   jd1(p, dmg, st, e) {
@@ -280,13 +280,13 @@ const SK = {
     for (const off of cages) {
       const cx = p.x + p.face * off, w = e ? 230 : 170, gy = p.y;
       W.fx.push({ k: 'cage', x: cx, w, t: 0, dur: 3.2, drop: 0.25, color: '#c48cff', gy });
-      later(0.25, () => { if (!W) return; areaHit(cx - w / 2, gy - 120, cx + w / 2, gy, dmg * 2, { stun: 3, color: '#c48cff' }); cam.shake = 5; SFX.play('chain'); });
+      fight(0.25, () => { if (!W) return; areaHit(cx - w / 2, gy - 120, cx + w / 2, gy, dmg * 2, { stun: 3, color: '#c48cff' }); cam.shake = 5; SFX.play('chain'); });
       W.areas.push({ x0: cx - w / 2, x1: cx + w / 2, y0: gy - 120, y1: gy, dmg, every: 0.35, t: 0, next: 0.6, dur: 3.2, color: '#c48cff', slow: 0.5 });
     }
   },
   jd3(p, dmg, st, e) {
     const n = 3 + e; p.castT = 0.3 * n;
-    for (let i = 0; i < n; i++) later(i * 0.3, () => { if (!W) return; const x = p.x + p.face * 30; W.fx.push({ k: 'gavelhit', x, y: p.y, t: 0, dur: 0.3, face: p.face }); W.pprj.push({ k: 'pshock', x, y: GROUND - 8, vx: p.face * 330, vy: 0, r: 16, dmg, pierce: 99, hit: new Set(), life: 0.9, color: '#c48cff', ground: true, gy: p.y }); fxRing(x, p.y - 4, 50 + i * 20, '#c48cff'); W.texts.push({ x, y: p.y - 86, s: '정숙' + '!'.repeat(i + 1), c: '#c48cff', t: 0, big: true }); cam.shake = 5 + i * 2; SFX.play('boom'); });
+    for (let i = 0; i < n; i++) fight(i * 0.3, () => { if (!W) return; const x = p.x + p.face * 30; W.fx.push({ k: 'gavelhit', x, y: p.y, t: 0, dur: 0.3, face: p.face }); W.pprj.push({ k: 'pshock', x, y: GROUND - 8, vx: p.face * 330, vy: 0, r: 16, dmg, pierce: 99, hit: new Set(), life: 0.9, color: '#c48cff', ground: true, gy: p.y }); fxRing(x, p.y - 4, 50 + i * 20, '#c48cff'); W.texts.push({ x, y: p.y - 86, s: '정숙' + '!'.repeat(i + 1), c: '#c48cff', t: 0, big: true }); cam.shake = 5 + i * 2; SFX.play('boom'); });
   },
   jd_u(p, dmg) {
     const vis = visibleMobs().sort((a, b) => b.max - a.max);
@@ -294,8 +294,8 @@ const SK = {
     W.fx.push({ k: 'gavel', x: tx, t: 0, dur: 0.75, hit: false, dmg, splash: dmg * 0.35, gy: vis[0] ? vis[0].y : p.y });
   },
   jd_u2(p, dmg) {
-    for (let i = 0; i < 13; i++) later(i * 0.07, () => { if (!W) return; const x = cam.x + 20 + rand(0, viewW - 40); W.pprj.push({ k: 'minigavel', x, y: cam.y - 30, vx: 0, vy: 560, r: 18, dmg: dmg * 0.7, pierce: 6, hit: new Set(), life: 2, rot: -0.6, land: 'purple' }); });
-    later(1.1, () => { if (!W) return; const vis = visibleMobs().sort((a, b) => b.max - a.max); const tx = vis[0] ? vis[0].x : player.x + player.face * 120; W.fx.push({ k: 'gavel', x: tx, t: 0, dur: 0.75, hit: false, dmg: dmg * 1.6, splash: dmg * 0.5, gy: vis[0] ? vis[0].y : player.y, big: true }); });
+    for (let i = 0; i < 13; i++) fight(i * 0.07, () => { if (!W) return; const x = cam.x + 20 + rand(0, viewW - 40); W.pprj.push({ k: 'minigavel', x, y: cam.y - 30, vx: 0, vy: 560, r: 18, dmg: dmg * 0.7, pierce: 6, hit: new Set(), life: 2, rot: -0.6, land: 'purple' }); });
+    fight(1.1, () => { if (!W) return; const vis = visibleMobs().sort((a, b) => b.max - a.max); const tx = vis[0] ? vis[0].x : player.x + player.face * 120; W.fx.push({ k: 'gavel', x: tx, t: 0, dur: 0.75, hit: false, dmg: dmg * 1.6, splash: dmg * 0.5, gy: vis[0] ? vis[0].y : player.y, big: true }); });
   },
   // ---------------- 국선전담변호사 ----------------
   df1(p, dmg, st, e) {
@@ -321,8 +321,8 @@ const SK = {
   },
   df_u(p, dmg) {
     buffs.invuln = 6;
-    for (let i = -2; i <= 2; i++) later(Math.abs(i) * 0.08, () => { if (!W) return; W.fx.push({ k: 'pillar', x: p.x + i * 60, w: 46, color: '#ffd76b', t: 0, dur: 0.9 }); });
-    later(0.2, () => { if (!W) return; circleHit(p.x, p.y - 40, 200, dmg, { kb: 200, heavy: true, color: '#ffd76b' }); cam.shake = 10; });
+    for (let i = -2; i <= 2; i++) fight(Math.abs(i) * 0.08, () => { if (!W) return; W.fx.push({ k: 'pillar', x: p.x + i * 60, w: 46, color: '#ffd76b', t: 0, dur: 0.9 }); });
+    fight(0.2, () => { if (!W) return; circleHit(p.x, p.y - 40, 200, dmg, { kb: 200, heavy: true, color: '#ffd76b' }); cam.shake = 10; });
     W.fx.push({ k: 'dome', follow: true, r: 64, t: 0, dur: 6, color: '#fff3a0' });
   },
   // ---------------- 특별검사 ----------------
@@ -331,10 +331,10 @@ const SK = {
       p.dashT = 0.14 * (e ? 1.3 : 1); p.dashV = dir * 1350; p.castT = 0.2; p.inv = Math.max(p.inv, 0.25); p.face = dir;
       const marks = new Set();
       W.areas.push({ follow: true, ox0: -60, ox1: 30, y0: -64, y1: 0, dmg, once: true, hit: marks, dur: p.dashT + 0.04, t: 0, kb: 40, color: '#d9e2ff' });
-      later(p.dashT + 0.08, () => { if (!W) return; for (const m of marks) { W.fx.push({ k: 'xmark', x: m.x, y: m.y - m.h / 2, t: 0, dur: 0.4, color: '#d9e2ff' }); damageMob(m, dmg * 0.6, { stun: 0.6, color: '#d9e2ff', quiet: true }); } if (marks.size) { cam.shake = 6; SFX.play('crit'); } });
+      fight(p.dashT + 0.08, () => { if (!W) return; for (const m of marks) { W.fx.push({ k: 'xmark', x: m.x, y: m.y - m.h / 2, t: 0, dur: 0.4, color: '#d9e2ff' }); damageMob(m, dmg * 0.6, { stun: 0.6, color: '#d9e2ff', quiet: true }); } if (marks.size) { cam.shake = 6; SFX.play('crit'); } });
     };
     const f = p.face; go(f);
-    if (e >= 2) p.onDashEnd = () => later(0.12, () => { if (W && !p.dead) go(-f); });
+    if (e >= 2) p.onDashEnd = () => fight(0.12, () => { if (W && !p.dead) go(-f); });
   },
   sp2(p, dmg, st, e) {
     const R = e ? 120 : 95, dur = e >= 2 ? 4.5 : 3;
@@ -348,7 +348,7 @@ const SK = {
   sp_u(p, dmg) {
     const vis = visibleMobs();
     for (const m of vis) W.fx.push({ k: 'skychain', x: m.x, y: m.y - m.h / 2, t: 0, dur: 1.4 });
-    later(0.45, () => { if (!W) return; for (const m of vis) damageMob(m, dmg * 1.3, { stun: 3, color: '#d9e2ff', quiet: true }); cam.shake = 12; SFX.play('chain'); SFX.play('boom'); });
+    fight(0.45, () => { if (!W) return; for (const m of vis) damageMob(m, dmg * 1.3, { stun: 3, color: '#d9e2ff', quiet: true }); cam.shake = 12; SFX.play('chain'); SFX.play('boom'); });
   },
   // ---------------- 헌법재판관 ----------------
   js1(p, dmg, st, e) {
@@ -362,12 +362,12 @@ const SK = {
   },
   js3(p, dmg, st, e) {
     const n = [9, 12, 15][e]; p.castT = 0.6;
-    for (let i = 0; i < n; i++) later(i * 0.1, () => { if (!W) return; const x = p.x + p.face * (50 + i * (360 / n)); W.fx.push({ k: 'pillar', x, w: 30, color: '#ffd24d', t: 0, dur: 0.55 }); areaHit(x - 20, cam.y - 40, x + 20, GROUND, dmg, { kb: 30, color: '#ffd24d' }); SFX.play('zap'); });
+    for (let i = 0; i < n; i++) fight(i * 0.1, () => { if (!W) return; const x = p.x + p.face * (50 + i * (360 / n)); W.fx.push({ k: 'pillar', x, w: 30, color: '#ffd24d', t: 0, dur: 0.55 }); areaHit(x - 20, cam.y - 40, x + 20, GROUND, dmg, { kb: 30, color: '#ffd24d' }); SFX.play('zap'); });
   },
   js_u(p, dmg, st) {
     p.hp = st.hp;
-    for (let i = 0; i < 9; i++) later(i * 0.06, () => { if (!W) return; W.fx.push({ k: 'pillar', x: cam.x + 20 + i * (viewW - 40) / 8, w: 50, color: '#ffd24d', t: 0, dur: 0.9 }); });
-    later(0.35, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.6, { stun: 1.5, color: '#ffd24d', quiet: true }); cam.shake = 12; });
+    for (let i = 0; i < 9; i++) fight(i * 0.06, () => { if (!W) return; W.fx.push({ k: 'pillar', x: cam.x + 20 + i * (viewW - 40) / 8, w: 50, color: '#ffd24d', t: 0, dur: 0.9 }); });
+    fight(0.35, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.6, { stun: 1.5, color: '#ffd24d', quiet: true }); cam.shake = 12; });
     W.texts.push({ x: p.x, y: p.y - 90, s: '멘탈 완전 회복', c: '#8dffb0', t: 0, big: true });
   },
   // ---------------- 리걸테크 CEO ----------------
@@ -384,7 +384,7 @@ const SK = {
     const R = e ? 260 : 200; p.castT = 0.45;
     for (const m of liveMobs()) if (!m.fake && !m.boss && Math.abs(m.x - p.x) < R && Math.abs(m.y - p.y) < 90) { m.x += (p.x + p.face * 50 - m.x) * 0.85; m.stun = Math.max(m.stun, 0.5); fxSpark(m.x, m.y - m.h / 2, '#ffd24d', 4); }
     W.fx.push({ k: 'ring', x: p.x, y: p.y - 30, r: R * 0.6, color: '#ffd24d', t: 0, dur: 0.4 });
-    later(0.18, () => {
+    fight(0.18, () => {
       if (!W) return;
       W.fx.push({ k: 'slash', x: p.x + p.face * 12, y: p.y - 36, r: 112, face: p.face, color: '#ffd24d', t: 0, dur: 0.28, combo: 3, w: 20 });
       const thr = e >= 2 ? 0.4 : 0.3;
@@ -394,12 +394,12 @@ const SK = {
   },
   ce_u(p, dmg) {
     W.fx.push({ k: 'chart', x0: cam.x, x1: cam.x + viewW, gy: p.y, t: 0, dur: 1.3 });
-    later(0.45, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.6, { stun: 1.2, color: '#ffd24d', quiet: true }); cam.shake = 12; SFX.play('boom'); });
+    fight(0.45, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.6, { stun: 1.2, color: '#ffd24d', quiet: true }); cam.shake = 12; SFX.play('boom'); });
     for (let i = 0; i < 20; i++) W.pprj.push({ k: 'coinp', x: cam.x + 20 + rand(0, viewW - 40), y: cam.y - 20 - rand(0, 220), vx: rand(-20, 20), vy: 300, r: 9, dmg: dmg * 0.4, pierce: 2, hit: new Set(), life: 3, rot: 0, vr: 10, land: 'dust', delay: 0.5 + rand(0, 0.4) });
   },
   ce_u2(p, dmg) {
-    for (let k = 0; k < 2; k++) later(k * 0.5, () => { if (!W) return; W.fx.push({ k: 'chart', x0: cam.x, x1: cam.x + viewW, gy: p.y - k * 30, t: 0, dur: 1.2, txt: k ? '유니콘!' : '상장!' }); });
-    for (let k = 0; k < 2; k++) later(0.45 + k * 0.5, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.25, { stun: 1.2, color: '#ffd24d', quiet: true }); cam.shake = 13; SFX.play('boom'); });
+    for (let k = 0; k < 2; k++) fight(k * 0.5, () => { if (!W) return; W.fx.push({ k: 'chart', x0: cam.x, x1: cam.x + viewW, gy: p.y - k * 30, t: 0, dur: 1.2, txt: k ? '유니콘!' : '상장!' }); });
+    for (let k = 0; k < 2; k++) fight(0.45 + k * 0.5, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.25, { stun: 1.2, color: '#ffd24d', quiet: true }); cam.shake = 13; SFX.play('boom'); });
     for (let i = 0; i < 32; i++) W.pprj.push({ k: 'coinp', x: cam.x + 20 + rand(0, viewW - 40), y: cam.y - 20 - rand(0, 260), vx: rand(-20, 20), vy: 320, r: 10, dmg: dmg * 0.4, pierce: 2, hit: new Set(), life: 3, rot: 0, vr: 10, land: 'dust', delay: 0.6 + rand(0, 0.8) });
     W.texts.push({ x: p.x, y: p.y - 100, s: '기업가치 1조!', c: '#ffd24d', t: 0, big: true });
   },
@@ -419,8 +419,8 @@ const SK = {
   },
   po_u(p, dmg) {
     for (let i = 0; i < 40; i++) W.fx.push({ k: 'part', x: cam.x + rand(0, viewW), y: cam.y + rand(-20, 40), vx: rand(-60, 60), vy: rand(20, 120), rot: rand(0, 6), vr: rand(-8, 8), color: pick(['#ff6b6b', '#ffe45c', '#4fd1c5', '#c48cff', '#7ee08a']), t: 0, dur: rand(1.2, 2), paper: true });
-    for (let i = 0; i < 6; i++) later(i * 0.12, () => { if (W) { fxRing(cam.x + rand(40, viewW - 40), cam.y + rand(40, 140), 50, pick(['#ffe45c', '#4fd1c5', '#ff6b6b'])); SFX.play('zap'); } });
-    later(0.4, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.5, { stun: 2.5, color: '#4fd1c5', quiet: true }); cam.shake = 12; });
+    for (let i = 0; i < 6; i++) fight(i * 0.12, () => { if (W) { fxRing(cam.x + rand(40, viewW - 40), cam.y + rand(40, 140), 50, pick(['#ffe45c', '#4fd1c5', '#ff6b6b'])); SFX.play('zap'); } });
+    fight(0.4, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.5, { stun: 2.5, color: '#4fd1c5', quiet: true }); cam.shake = 12; });
     W.texts.push({ x: p.x, y: p.y - 96, s: '당선 확정!', c: '#4fd1c5', t: 0, big: true });
   },
   po_u2(p, dmg) {
@@ -428,10 +428,10 @@ const SK = {
     for (let i = 0; i < 50; i++) W.fx.push({ k: 'part', x: cam.x + rand(0, viewW), y: cam.y + rand(-20, 40), vx: rand(-60, 60), vy: rand(20, 120), rot: rand(0, 6), vr: rand(-8, 8), color: pick(['#ff6b6b', '#ffe45c', '#4fd1c5', '#c48cff', '#7ee08a']), t: 0, dur: rand(1.2, 2), paper: true });
     for (let k = 0; k < 3; k++) {
       const cx = cam.x + viewW * (0.25 + k * 0.25);
-      later(k * 0.3, () => { if (!W) return; W.fx.push({ k: 'bigstamp', x: cx, t: 0, dur: 1.0, hitAt: 0.32, gy: p.y, txt: '가 결', c: '#2f8f86' }); });
-      later(k * 0.3 + 0.32, () => { if (!W) return; for (const m of visibleMobs()) if (Math.abs(m.x - cx) < 180) damageMob(m, dmg * 1.3, { stun: 2.5, color: '#4fd1c5', quiet: true }); cam.shake = 12; SFX.play('boom'); });
+      fight(k * 0.3, () => { if (!W) return; W.fx.push({ k: 'bigstamp', x: cx, t: 0, dur: 1.0, hitAt: 0.32, gy: p.y, txt: '가 결', c: '#2f8f86' }); });
+      fight(k * 0.3 + 0.32, () => { if (!W) return; for (const m of visibleMobs()) if (Math.abs(m.x - cx) < 180) damageMob(m, dmg * 1.3, { stun: 2.5, color: '#4fd1c5', quiet: true }); cam.shake = 12; SFX.play('boom'); });
     }
-    later(1.1, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg, { stun: 3.5, color: '#4fd1c5', quiet: true }); W.fx.push({ k: 'flash', t: 0, dur: 0.35, color: '#4fd1c5' }); });
+    fight(1.1, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg, { stun: 3.5, color: '#4fd1c5', quiet: true }); W.fx.push({ k: 'flash', t: 0, dur: 0.35, color: '#4fd1c5' }); });
     W.texts.push({ x: p.x, y: p.y - 96, s: '재석 300 · 찬성 300!', c: '#4fd1c5', t: 0, big: true });
   },
   // ---------------- 법률 유튜버 ----------------
@@ -447,20 +447,20 @@ const SK = {
     const n = [6, 8, 10][e]; const pool = visibleMobs().slice().sort(() => Math.random() - 0.5);
     if (!pool.length) { W.fx.push({ k: 'pillar', x: p.x + p.face * 120, w: 34, color: '#ff6bb5', t: 0, dur: 0.6 }); return; }
     const vis = Array.from({ length: n }, (_, i) => pool[i % pool.length]);
-    vis.forEach((m, i) => later(i * 0.08, () => { if (!W || m.dead) return; W.fx.push({ k: 'pillar', x: m.x, w: 34, color: '#ff6bb5', t: 0, dur: 0.6 }); damageMob(m, dmg, { stun: e >= 2 ? 1.2 : 0.3, color: '#ff6bb5' }); W.texts.push({ x: m.x, y: m.y - m.h - 18, s: '좋아요', c: '#ff6bb5', t: 0 }); SFX.play('zap'); }));
+    vis.forEach((m, i) => fight(i * 0.08, () => { if (!W || m.dead) return; W.fx.push({ k: 'pillar', x: m.x, w: 34, color: '#ff6bb5', t: 0, dur: 0.6 }); damageMob(m, dmg, { stun: e >= 2 ? 1.2 : 0.3, color: '#ff6bb5' }); W.texts.push({ x: m.x, y: m.y - m.h - 18, s: '좋아요', c: '#ff6bb5', t: 0 }); SFX.play('zap'); }));
   },
   yt_u(p, dmg) {
     p.viewers += 3000;
     W.fx.push({ k: 'trophy', x: p.x, y: p.y - 70, t: 0, dur: 1.4 });
     for (let i = 0; i < 18; i++) W.pprj.push({ k: 'heart', x: cam.x + 20 + rand(0, viewW - 40), y: cam.y - 20 - rand(0, 200), vx: 0, vy: 300, r: 11, dmg: dmg * 0.8, pierce: 3, hit: new Set(), life: 3, rot: 0, vr: 0, land: 'dust' });
-    later(0.5, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg, { stun: 1, color: '#ff6bb5', quiet: true }); cam.shake = 10; });
+    fight(0.5, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg, { stun: 1, color: '#ff6bb5', quiet: true }); cam.shake = 10; });
     W.texts.push({ x: p.x, y: p.y - 100, s: '구독자 100만!', c: '#c48cff', t: 0, big: true });
   },
   yt_u2(p, dmg) {
     p.viewers += 6000;
     W.fx.push({ k: 'trophy', x: p.x, y: p.y - 90, t: 0, dur: 1.6, sc: 2.2 });
     for (let i = 0; i < 28; i++) W.pprj.push({ k: 'heart', x: cam.x + 20 + rand(0, viewW - 40), y: cam.y - 20 - rand(0, 240), vx: 0, vy: 320, r: 12, dmg: dmg * 0.7, pierce: 3, hit: new Set(), life: 3, rot: 0, vr: 0, land: 'dust' });
-    for (let k = 0; k < 2; k++) later(0.5 + k * 0.45, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.1, { stun: 1.2, color: '#ffd24d', quiet: true }); fxRing(p.x, p.y - 30, 260, '#ffd24d'); cam.shake = 11; SFX.play('boom'); });
+    for (let k = 0; k < 2; k++) fight(0.5 + k * 0.45, () => { if (!W) return; for (const m of visibleMobs()) damageMob(m, dmg * 1.1, { stun: 1.2, color: '#ffd24d', quiet: true }); fxRing(p.x, p.y - 30, 260, '#ffd24d'); cam.shake = 11; SFX.play('boom'); });
     W.texts.push({ x: p.x, y: p.y - 110, s: '골드버튼 언박싱!', c: '#ffd24d', t: 0, big: true });
   },
 };

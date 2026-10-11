@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.12-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.13-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -164,7 +164,8 @@ function load(n = SLOT) {
   } catch (e) { /* 새 게임 */ }
 }
 let saveOff = false;   // 계정·데이터 삭제 직후: 다시 저장하지 않는다
-function save() { if (!S.major || saveOff) return; try { S.saved = now(); localStorage.setItem(slotKey(SLOT), JSON.stringify(S)); } catch (e) { /* 무시 */ } }
+function save() { if (!S.major || saveOff || scene === 'title') return;   // 타이틀에서는 저장 안 함: 방금 지운 슬롯에 메모리의 캐릭터를 다시 쓰던 문제
+  try { S.saved = now(); localStorage.setItem(slotKey(SLOT), JSON.stringify(S)); } catch (e) { /* 무시 */ } }
 // 슬롯은 기본 3칸, 영구 구매 「세이브 슬롯 +3칸」으로 6칸 (예전 테스트 구매 extraSlots도 인정)
 function slotCount() { return Math.min(6, SLOTS + (owns('slots') ? 3 : accLoad().extraSlots || 0)); }
 // 재심(새 회차): 같은 슬롯에서 대학생부터. 성장(레벨·장비·스탯·스킬·상식·동료·코스튬)은 이어 가고 진로·사건만 다시
@@ -377,6 +378,7 @@ let hitStop = 0, timeScale = 1;
 let viewW = VW, offY = 0;
 const timers = [];
 function later(sec, fn) { timers.push({ t: sec, fn }); }
+function fight(sec, fn) { timers.push({ t: sec, fn, b: 1 }); }   // 전투 예약: 메뉴·대사 동안 멈춘다
 
 function makePlayer(x) {
   const st = stats(), prev = player;
@@ -542,14 +544,16 @@ function spawnMid() {
 // ======================================================================
 // 업데이트
 // ======================================================================
+function runTimers(dt, battle) { for (const tm of timers.slice()) { if (!tm.b !== !battle) continue; tm.t -= dt; if (tm.t <= 0) { const i = timers.indexOf(tm); if (i >= 0) timers.splice(i, 1); tm.fn(); } } }
 function update(dt) {
   tick++;
-  for (const tm of timers.slice()) { tm.t -= dt; if (tm.t <= 0) { timers.splice(timers.indexOf(tm), 1); tm.fn(); } }
-  for (const k of Object.keys(buffs)) if (buffs[k] > 0) buffs[k] -= dt;
+  const paused = !!(W && player && (dialog.active || sheetOpen() || guideOpen()));
+  runTimers(dt, false);   // UI 예약(안내·배너·결과창)은 멈춰 있어도 흐른다
+  if (!paused) { runTimers(dt, true); for (const k of Object.keys(buffs)) if (buffs[k] > 0) buffs[k] -= dt; }   // 전투 예약(스킬 후속타·보스 낙하물)과 버프는 메뉴·대사·안내 동안 멈춘다
   if (hitStop > 0) { hitStop -= dt; return; }
   dt *= timeScale;
   if (!W || !player) return;
-  if (dialog.active || sheetOpen() || guideOpen()) { clearPressed(); return; }
+  if (paused) { clearPressed(); return; }
   W.t += dt;
   if (S.auto && scene === 'stage') autoPilot();
   updatePlayer(dt);
@@ -1188,8 +1192,8 @@ function updateKim(b, dt, dx, adx, ratio, contact) {
   if (ph !== b.phase) {
     b.phase = ph; showBanner(['', '기록 검토', '빈틈 포착', '기본권 방패', '끝까지 간다'][ph], `“${KIM_PHASE_LINES[ph]}”`); $('#boss-phase').textContent = `${ph}페이즈`; b.specialA = 1;
     // 소문 이벤트: 3개면 소문에 반응하고, 6개면 뿔 그림자가 드러난다
-    if (ph === 3 && R.length >= 3) later(1.8, () => { if (!b.dead) bossTxt(b, '그 소문… 누가 그래요?', '#c48cff'); });
-    if (ph === 4 && R.length >= 6) { b.horns = true; cam.shake = 10; later(1.8, () => { if (!b.dead) { bossTxt(b, '…반은 사실이에요.', '#ff6b6b'); showBanner('소문의 실체', '김성호의 그림자에 뿔이 돋는다'); } }); }
+    if (ph === 3 && R.length >= 3) fight(1.8, () => { if (!b.dead) bossTxt(b, '그 소문… 누가 그래요?', '#c48cff'); });
+    if (ph === 4 && R.length >= 6) { b.horns = true; cam.shake = 10; fight(1.8, () => { if (!b.dead) { bossTxt(b, '…반은 사실이에요.', '#ff6b6b'); showBanner('소문의 실체', '김성호의 그림자에 뿔이 돋는다'); } }); }
   }
   b.shieldClock = (b.shieldClock || 0) + dt;
   b.shield = ph === 3 && (b.shieldClock % 8) < 5;
@@ -1230,7 +1234,7 @@ function updateKakha(b, dt, dx, adx, ratio, contact) {
   if (b.cd > 0) return;
   const r = b.pat++ % (ph === 1 ? 3 : 4), a0 = Math.atan2((p.y - 30) - (b.y - 70), dx);
   if (r === 0) {   // 각하 도장: 내 자리에 거대한 도장이 떨어진다
-    const n = ph; for (let i = 0; i < n; i++) { const x = p.x + (i - (n - 1) / 2) * 70; later(i * 0.25, () => { if (W && !W.ended) W.fx.push({ k: 'drop', x, t: 0, dur: 1.4, warn: 1.0, w: 60, dmg: b.dmg * 1.1 }); }); }
+    const n = ph; for (let i = 0; i < n; i++) { const x = p.x + (i - (n - 1) / 2) * 70; fight(i * 0.25, () => { if (W && !W.ended) W.fx.push({ k: 'drop', x, t: 0, dur: 1.4, warn: 1.0, w: 60, dmg: b.dmg * 1.1 }); }); }
     bossTxt(b, '각하 도장!'); b.cd = 2.2;
   } else if (r === 1) {   // 기한 도과: 붉은 종이 폭풍
     const k = ph === 3 ? 16 : 12; for (let i = 0; i < k; i++) { const a = i * Math.PI * 2 / k + b.pat * 0.2; W.eprj.push({ k: 'paper', x: b.x, y: b.y - 70, vx: Math.cos(a) * 150, vy: Math.sin(a) * 150, r: 8, dmg: b.dmg * 0.5, life: 3.2, rot: 0 }); }

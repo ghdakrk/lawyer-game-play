@@ -90,7 +90,8 @@ function questDrops(src, from) {
       const need = q.goals.find((g) => g.k === 'item' && g.it === d.it).n;
       const pending = W.pickups.filter((p) => p.k === 'qitem' && p.it === d.it).length;
       if ((S.qitems[d.it] || 0) + pending >= need) continue;
-      if (Math.random() < d.rate * (from === 'elite' && f === 'all' ? 3 : 1)) dropLoot(src.x, src.y - 30, 'qitem', { it: d.it });
+      const rate = d.rate * (from === 'elite' && f === 'all' ? 3 : 1), pity = S.qpity || (S.qpity = {});
+      if (Math.random() < rate || (pity[d.it] = (pity[d.it] || 0) + rate) >= 1) { pity[d.it] = 0; dropLoot(src.x, src.y - 30, 'qitem', { it: d.it }); }   // 천장: 안 나온 확률이 쌓여 1이 되면 반드시 (운 나쁜 반복 사냥 방지)
     }
   }
 }
@@ -107,12 +108,35 @@ function acceptQuest(q, silent) {
 function turnIn(q) {
   if (!questReady(q)) return;
   for (const g of q.goals) { if (g.k === 'item') S.qitems[g.it] = Math.max(0, (S.qitems[g.it] || 0) - g.n); if (g.k === 'pay') S.gold -= g.n; }
-  S.q[q.id].st = 'done';
+  S.q[q.id].st = 'done'; S.q[q.id].pay = 1;   // pay = 보상 대기. 끝 대사 도중 꺼져도 다음 이어하기에서 준다 (settleQuests)
   SFX.play('quest');
   const lines = q.end || [];
-  const fin = () => { const msg = giveRewards(q.rew || {}); toast(`퀘스트 완료: <b>${esc(q.title)}</b>${msg ? ` · ${msg}` : ''}`, 4200); refreshQuestUI(); if (scene === 'town') rebuildNpcs(); save(); autoAcceptNext(); };
+  const fin = () => { const msg = payQuest(q); toast(`퀘스트 완료: <b>${esc(q.title)}</b>${msg ? ` · ${msg}` : ''}`, 4200); refreshQuestUI(); if (scene === 'town') rebuildNpcs(); save(); autoAcceptNext(); };
+  save();   // 물건 차감·완료·보상 대기를 한 번에 기록
   if (lines.length) startDialog(lines, fin); else fin();
 }
+function payQuest(q) { const st = S.q[q.id]; if (!st || !st.pay) return ''; delete st.pay; return giveRewards(q.rew || {}); }   // 한 번만
+// 이어하기: ① 보상 대기(pay)가 남은 퀘스트를 마저 준다 ② 0.7.12 이하에서 끝 대사 도중 꺼져 보상을 잃은 퀘스트를 고친다
+//   — 완료인데 진행에 꼭 필요한 보상(스킬·직업·승진·동료)이 없으면 그 퀘스트 보상을 한 번 준다. 핵심 보상이 있으면 이미 받은 것 → 손대지 않는다 (중복 지급 없음)
+function lostReward(q) {
+  const r = q.rew || {};
+  return !!((r.skill && !S.skl[r.skill]) || (r.job && !S.jobs.includes(r.job)) || (r.unlock && !S.jobs.includes(r.unlock)) || (r.rank && !S.rank[r.rank]) || (r.comp && !S.comps.includes(r.comp)));
+}
+function settleQuests() {
+  const got = [];
+  for (const q of QUESTS) {
+    const st = S.q[q.id]; if (!st || st.st !== 'done') continue;
+    if (!st.pay && !st.fix && lostReward(q)) { st.pay = 1; st.fix = 1; }
+    if (st.pay) { const msg = payQuest(q); got.push(`<b>${esc(q.title)}</b>${msg ? ` · ${msg}` : ''}`); }
+  }
+  if (!got.length) return;
+  later(0.8, () => toast(`못 받은 퀘스트 보상을 받았어요: ${got.join(' / ')}`, 5000));
+  refreshQuestUI(); save(); autoAcceptNext();
+}
+// 이어하기: 퇴학·자퇴 뒤 새 진로를 고르기 전에 꺼졌으면 진로 선택을 다시 연다
+const routePending = () => S.dropout && !S.jobs.some((j) => JOBS[j].route);
+function afterDialog(fn) { if (!dialog.active) { fn(); return; } const prev = dialog.cb; dialog.cb = () => { if (prev) prev(); fn(); }; }
+function resumePending() { settleQuests(); if (routePending()) later(0.6, () => afterDialog(() => { if (routePending()) routeSheet(); })); }
 function autoAcceptNext() { for (const q of QUESTS) if (q.auto && questAvail(q)) acceptQuest(q, true); }
 function giveRewards(r) {
   const out = [];
@@ -259,7 +283,7 @@ function interact(n) {
   const quizQ = qs.find((q) => qState(q.id) === 'active' && q.goals.some((g) => g.k === 'quiz') && !S.q[q.id].quiz);
   if (quizQ) { startQuiz(quizQ); return; }
   const examQ = qs.find((q) => qState(q.id) === 'active' && q.goals.some((g) => g.k === 'exam') && !S.q[q.id].exam);
-  if (examQ) { startQuiz(examQ, 'exam'); return; }
+  if (examQ) { examGate(examQ); return; }
   const avail = qs.filter(questAvail);
   const fn = NPCS[n.id].fn;
   if (!fn && avail.length === 1 && !qs.some((q) => qState(q.id) === 'active')) { acceptQuest(avail[0]); return; }
@@ -305,6 +329,11 @@ const qTypeName = (t) => ({ main: '메인', job: '전직', comp: '동료', clien
 
 // 퀴즈
 let quiz = null;
+const examCost = () => (((S.q.m4b && S.q.m4b.fails) || 0) >= 2 ? 100 : 0);   // 보충시험: 첫 번째 무료, 두 번째부터 인지 100
+function examGate(q) {   // 과락한 적이 있으면 바로 시험을 열지 않고 「보충시험 / 새 길」부터 (앱을 껐다 켜도 같은 선택)
+  if ((S.q[q.id] && S.q[q.id].fails) > 0) { quiz = { q, pool: [], i: 0, ok: 0, answered: null, exam: true, need: 3, gate: true }; openSheet('로스쿨 서바이벌 · 중간고사', [], quizRender, null, 'exam'); return; }
+  startQuiz(q, 'exam');
+}
 function startQuiz(q, kind = 'bar') {
   const exam = kind === 'exam';
   const pool = QUIZ.slice().sort(() => Math.random() - 0.5).slice(0, exam ? 6 : 5);
@@ -315,8 +344,11 @@ function quizRender() {
   const z = quiz; if (!z) return '';
   if (z.i >= z.pool.length) {
     const pass = z.ok >= z.need;
-    if (z.exam) return `<div class="card"><h3>${pass ? '통과!' : '과락'}</h3><p>${z.ok} / ${z.pool.length} 정답 · 통과선 ${z.need}문제</p>
-      <div class="row wrap">${pass ? '<button class="btn" data-act="exampass">결과 보고하기</button>' : '<button class="btn red" data-act="examfail">결과 확인…</button>'}</div></div>`;
+    if (z.exam && pass) return `<div class="card"><h3>통과!</h3><p>${z.ok} / ${z.pool.length} 정답 · 통과선 ${z.need}문제</p>
+      <div class="row wrap"><button class="btn" data-act="exampass">결과 보고하기</button></div></div>`;
+    if (z.exam) { const cost = examCost(); return `<div class="card"><h3>${z.gate ? '중간고사 보충시험' : '과락'}</h3><p>${z.gate ? '지난 중간고사에서 과락했어요.' : `${z.ok} / ${z.pool.length} 정답 · 통과선 ${z.need}문제`}</p>
+      <p class="note">보충시험으로 다시 볼 수 있어요 (${cost ? `응시료 인지 ${cost} · 지금 ${fmt(S.inji)}` : '첫 보충시험은 무료'}). 문제는 새로 나와요.<br>아니면 로스쿨을 그만두고 새 길 — 리걸테크 CEO · 정치 신인 · 법률 유튜버 — 로 갈 수도 있어요. 그 길은 되돌릴 수 없어요.</p>
+      <div class="row wrap"><button class="btn" data-act="examretry">보충시험 보기 · ${cost ? `인지 ${cost}` : '무료'}</button><button class="btn red ghost" data-act="examfail">자퇴하고 새 길로</button></div></div>`; }
     return `<div class="card"><h3>${pass ? '합격!' : '불합격'}</h3><p>${z.ok} / ${z.pool.length} 정답 · 합격선 ${z.need}문제</p>
       <div class="row wrap">${pass ? '<button class="btn" data-act="quizpass">결과 보고하기</button>' : '<button class="btn" data-act="quizretry">다시 응시</button><button class="btn ghost" data-act="close">나중에</button>'}</div></div>`;
   }
@@ -1587,7 +1619,7 @@ function importSave(file) {
   r.onload = () => {
     try { const d = JSON.parse(r.result); if (!d || d.v !== 5 || !d.major) throw new Error('형식'); localStorage.setItem(slotKey(SLOT), JSON.stringify(d)); }
     catch (e) { toast('세이브 파일이 아니에요'); return; }
-    load(SLOT); ensureLoadout(); checkPassives(); fixJobQuests(); applyOwned(); closeSheet(); enterTown(); toast(`슬롯 ${SLOT}에 세이브 파일을 불러왔어요`);
+    load(SLOT); ensureLoadout(); checkPassives(); fixJobQuests(); applyOwned(); closeSheet(); enterTown(); resumePending(); toast(`슬롯 ${SLOT}에 세이브 파일을 불러왔어요`);
   };
   r.readAsText(file);
 }
@@ -1675,6 +1707,7 @@ function kakhaEpilogue() {
 let dropArm = false, ngArm = false, skArm = false, wipeArm = false;
 function jobSheet() {
   dropArm = false; ngArm = false;
+  if (routePending()) { routeSheet(); return; }
   openSheet('진로 상담', [], () => {
     const t2 = S.jobs.filter((j) => JOBS[j].tier >= 2);
     const canDrop = S.job === 'lawschool' && !S.dropout && !t2.length;
@@ -1806,7 +1839,8 @@ function onSheetClick(ev) {
   else if (a === 'revive') revive();
   else if (a === 'revcharge') { openMenu('shop'); toCharge(); }
   else if (a === 'exampass') { const q = quiz.q; S.q[q.id].exam = true; closeSheet(); turnIn(q); }
-  else if (a === 'examfail') expel(false);
+  else if (a === 'examfail') expel(true);
+  else if (a === 'examretry') { const q = quiz.q, cost = examCost(); if (S.inji < cost) { toast(`보충시험 응시료 인지 ${cost}가 부족해요 · 상점에서 충전하거나, 자퇴하고 새 길로 갈 수 있어요`, 4500); return; } S.inji -= cost; if (cost) toast(`보충시험 응시 · 인지 −${cost}`); save(); startQuiz(q, 'exam'); }
   else if (a === 'dropout') { dropArm = true; refreshSheet(); }
   else if (a === 'retrial') { if (!canRetrial()) return; ngArm = true; refreshSheet(); }
   else if (a === 'retrial2') { if (!canRetrial()) return; ngArm = false; retrial(); const rf = refundSkills((sid) => JOBS[SKILLS[sid].job].tier < 2); closeSheet(); ensureLoadout(true); checkPassives(); statCache = null; enterStage(1, 1); later(0.2, () => showBanner(`재심 ${S.ng}회차`, `특전: 이력서 칸 +1 (지금 ${resumeSlots()}칸) · 스킬 초기화 SP ${rf.sp} 환급`)); }
@@ -1847,7 +1881,7 @@ function onSheetClick(ev) {
   else if (a === 'food' || a === 'mall') openMenu('shop');
   else if (a === 'board') openBoard();
   else if (a === 'chat') { const id = sheetNpc; closeSheet(); const n = NPCS[id]; const port = n.img === 'npc_haechi' ? 'haechi' : id; const tl = NPC_TRIVIA[id] || []; const fresh = tl.filter((t) => !S.trivia.includes(t)); const tid = fresh.length && Math.random() < 0.7 ? pick(fresh) : null; if (tid) { const c = TRIVIA[tid]; startDialog([[n.name, port, `그거 알아? ${c.d}`], ['sys', null, `[법률 상식] ${c.law}`]], () => learnTrivia(tid)); } else startDialog([[n.name, port, NPC_CHAT[id] ? NPC_CHAT[id]() : '…']]); }
-  else if (a === 'quiznext') { quiz.i++; quiz.answered = null; refreshSheet(); }
+  else if (a === 'quiznext') { quiz.i++; quiz.answered = null; if (quiz.exam && quiz.i >= quiz.pool.length && quiz.ok < quiz.need) { const st = S.q[quiz.q.id]; if (st) { st.fails = (st.fails || 0) + 1; save(); } } refreshSheet(); }   // 과락은 바로 기록 (껐다 켜도 무료 재응시가 되지 않게)
   else if (a === 'quizretry') { const q = quiz.q; startQuiz(q); }
   else if (a === 'quizpass') { const q = quiz.q; S.q[q.id].quiz = true; closeSheet(); turnIn(q); }
   else if (a === 'close') closeSheet();
@@ -1911,7 +1945,7 @@ function wipeAll() {
   accRaw = null; accObj = null; toast('이 기기의 계정·게임 데이터를 모두 지웠어요', 3000); setTimeout(() => window.location.reload(), 900);
 }
 function showTitle() {
-  scene = 'title'; W = null; player = null; save();
+  save(); scene = 'title'; W = null; player = null;   // 게임에서 나올 때 저장. 타이틀에서는 저장하지 않는다 (save가 막음)
   const t = $('#title'); t.classList.add('show');
   const heroes = ['student', 'assoc', 'prosecutor', 'judge'].map((id) => jobPortrait(id));
   const acc = accLoad(), got = ENDING_IDS.filter((id) => acc.endings[id]).length;
@@ -1927,7 +1961,7 @@ function showTitle() {
     const b = ev.target.closest('button'); if (!b) return;
     SFX.init(); BGM.ensure();
     if (b.dataset.slotNew) { SLOT = +b.dataset.slotNew; S = newState(); t.classList.remove('show'); chooseMajor(); }
-    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); monthlyTick(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); }
+    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); monthlyTick(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); resumePending(); }
     else if (b.dataset.slotDel) { const n = +b.dataset.slotDel; if (slotArm === n) { deleteSlot(n); slotArm = 0; } else { slotArm = n; setTimeout(() => { if (slotArm === n && scene === 'title') { slotArm = 0; showTitle(); } }, 3000); } showTitle(); }
     else if (b.id === 't-ends') endingGallery();
     else if (b.id === 't-ext') openExternal();
