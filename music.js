@@ -61,9 +61,10 @@ const BGM = {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     node.connect(g).connect(this.out); o.start(t); o.stop(t + dur + 0.02);
   },
-  noise(t, dur, vol, hp) {
-    const c = this.ctx, len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  noise(t, dur, vol, hp) {   // 잡음 버퍼는 길이별로 한 번 만들어 다시 쓴다 (게임 난수를 건드리지 않게 · 매 박자 새로 만들지 않게)
+    const c = this.ctx, len = Math.floor(c.sampleRate * dur), bufs = this.nbufs || (this.nbufs = {});
+    let buf = bufs[len];
+    if (!buf) { buf = bufs[len] = c.createBuffer(1, len, c.sampleRate); const d = buf.getChannelData(0); let x = 0x1f2e3d4c; for (let i = 0; i < len; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; d[i] = ((x >>> 0) / 4294967296 * 2 - 1) * (1 - i / len); } }
     const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = vol;
     s.connect(f).connect(g).connect(this.out); s.start(t);
   },

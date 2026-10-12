@@ -380,7 +380,8 @@ const SK = {
   },
   ce2(p, dmg, st, e) {
     // 앞쪽 가장 가까운 적 위로 떨어지게 던진다 (예전엔 늘 같은 거리로 날아가 붙어 싸우는 보스를 넘어가 버렸다)
-    const T = 2 * 390 / 950, tg = liveMobs().filter((m) => !m.fake && (m.x - p.x) * p.face > 20 && (m.x - p.x) * p.face < 420 && Math.abs(m.y - p.y) < 120).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+    // 몸이 겹치거나 바로 앞(0~20px)에 붙은 적도 표적 — 몸 폭의 절반만큼 뒤까지 인정. 다른 층(세로 120px 밖)·420px 밖은 제외
+    const T = 2 * 390 / 950, tg = liveMobs().filter((m) => { const dx = (m.x - p.x) * p.face; return !m.fake && dx > -(m.w / 2 + 8) && dx < 420 && Math.abs(m.y - p.y) < 120; }).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
     for (let i = 0; i <= e; i++) {
       const vx = tg ? (tg.x + p.face * (i - e / 2) * 46 - (p.x + p.face * 14)) / T : p.face * (240 + i * 95);
       W.pprj.push({ k: 'moneybag', x: p.x + p.face * 14, y: p.y - 44, vx, vy: -390, g: 950, r: 12, dmg, pierce: 0, hit: new Set(), life: 2.4, rot: 0, vr: 7, land: 'money', boomR: 82, stun: e >= 2 ? 1.2 : 0, nohit: true, delay: i * 0.1 });

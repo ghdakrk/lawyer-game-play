@@ -70,7 +70,7 @@ function compPortrait(id) { const c = COMPANIONS[id]; return c.boss ? 'assets/bo
 // 사운드 (합성음)
 // ======================================================================
 const SFX = {
-  ctx: null, on: true, last: {},
+  ctx: null, on: true, last: {}, bufs: {},
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; return; }
@@ -84,9 +84,12 @@ const SFX = {
       const o = c.createOscillator(), g = c.createGain(); o.type = wave; o.frequency.setValueAtTime(f0, t + at); o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + at + dur);
       g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.001, t + at + dur); o.connect(g).connect(this.bus); o.start(t + at); o.stop(t + at + dur + 0.02);
     };
+    // 잡음 버퍼는 길이별로 한 번만 만들어 다시 쓴다 — 게임의 난수(Math.random)를 쓰지 않는다:
+    // 효과음은 실제 시간(40ms 간격)에 따라 나거나 안 나서, 같은 판도 결과가 달라지던 원인이었다 (밸런스 시험 재현성)
     const noise = (dur, vol = 0.12, hp = 800) => {
-      const len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const len = Math.floor(c.sampleRate * dur), key = 'n' + len;
+      let buf = this.bufs[key];
+      if (!buf) { buf = this.bufs[key] = c.createBuffer(1, len, c.sampleRate); const d = buf.getChannelData(0); let x = 0x2545f491; for (let i = 0; i < len; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; d[i] = ((x >>> 0) / 4294967296 * 2 - 1) * (1 - i / len); } }
       const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = vol;
       s.connect(f).connect(g).connect(this.bus); s.start(t);
     };
@@ -113,7 +116,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.15-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.16-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
