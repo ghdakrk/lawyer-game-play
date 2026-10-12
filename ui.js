@@ -135,6 +135,15 @@ function settleQuests() {
 }
 // 이어하기: 퇴학·자퇴 뒤 새 진로를 고르기 전에 꺼졌으면 진로 선택을 다시 연다
 const routePending = () => S.dropout && !S.jobs.some((j) => JOBS[j].route);
+// 불러온 슬롯을 지금 규칙에 맞춘다 (타이틀 이어하기 · 세이브 파일 불러오기 공통)
+function prepLoaded() { ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); monthlyTick(); syncEndings(); }
+// 슬롯이 본 엔딩(S.endSeen)을 계정 엔딩 도감에 합친다: 새 기기·세이브 파일로 옮겨도 도감이 비지 않게. 있는 기록은 그대로, 모르는 키는 무시
+function syncEndings() {
+  const acc = accLoad(); let n = 0;
+  for (const [k, v] of Object.entries(S.endSeen || {})) if (ENDINGS[k] && !acc.endings[k]) { acc.endings[k] = typeof v === 'number' && v > 0 ? v : now(); n++; }
+  if (n) accSave(acc);
+  return n;
+}
 function afterDialog(fn) { if (!dialog.active) { fn(); return; } const prev = dialog.cb; dialog.cb = () => { if (prev) prev(); fn(); }; }
 function resumePending() { settleQuests(); if (routePending()) later(0.6, () => afterDialog(() => { if (routePending()) routeSheet(); })); }
 function autoAcceptNext() { for (const q of QUESTS) if (q.auto && questAvail(q)) acceptQuest(q, true); }
@@ -1031,6 +1040,10 @@ function badgeState() {
   return b;
 }
 function updateBadges() {
+  if (S.major && scene !== 'title') {   // 새로 생긴 메뉴 탭 알림 (예전 저장은 지금 보이는 탭을 이미 본 것으로)
+    const seen = S.tabsSeen || (S.tabsSeen = Object.keys(TAB_OPEN).filter((k) => TAB_OPEN[k]()));
+    for (const k of Object.keys(TAB_OPEN)) if (!seen.includes(k) && TAB_OPEN[k]()) { seen.push(k); toast(`메뉴에 「${MENU_TABS.find((t) => t[0] === k)[1]}」 탭이 생겼어요`, 3500); }
+  }
   const b = badgeState(); const any = b.stat || b.skill || b.resume;
   const el = $('#badge-menu'); if (el) { el.hidden = !any; el.textContent = ''; $('#b-menu').title = b.stat ? `스탯 포인트 ${S.pts}` : '새 소식'; }
   document.querySelectorAll('#sh-tabs button').forEach((t) => t.classList.toggle('dot', !!b[t.dataset.tab]));
@@ -1150,21 +1163,57 @@ function tryCloseSheet() {
   closeSheet();
 }
 function closeSheet() { $('#sheet').classList.remove('show', 'top'); sheetRender = null; selItem = null; sheetMode = ''; quiz = null; save(); refreshQuestUI(); }
-const MENU_TABS = [['stat', '상태'], ['skill', '스킬'], ['resume', '이력서'], ['bag', '가방'], ['cos', '코디'], ['quest', '퀘스트'], ['comp', '동료'], ['shop', '상점'], ['book', '도감'], ['opt', '설정']];
-function openMenu(tab) { openSheet('메뉴', MENU_TABS, menuRender, tab); updateBadges(); }
+// 메뉴 탭: 핵심 성장(상태·스킬·가방·퀘스트) 먼저. 동료·이력서·도감은 쓸 수 있게 될 때 나타난다 (처음 화면의 정보를 줄인다)
+const MENU_TABS = [['stat', '상태'], ['skill', '스킬'], ['bag', '가방'], ['quest', '퀘스트'], ['comp', '동료'], ['resume', '이력서'], ['cos', '코디'], ['shop', '상점'], ['book', '도감'], ['opt', '설정']];
+const TAB_OPEN = { comp: () => S.comps.length > 0, resume: () => S.jobs.length >= 2, book: () => S.trivia.length > 0 };
+const menuTabs = () => MENU_TABS.filter(([k]) => !TAB_OPEN[k] || TAB_OPEN[k]());
+function openMenu(tab) { const tabs = menuTabs(); if (tab && !tabs.some(([k]) => k === tab)) tab = 'stat'; openSheet('메뉴', tabs, menuRender, tab); updateBadges(); }
 function menuRender(tab) {
   return ({ stat: statTab, skill: skillTab, resume: resumeTab, bag: bagTab, cos: cosTab, quest: questTab, comp: compTab, shop: shopTab, book: bookTab, opt: optTab }[tab] || statTab)();
 }
+// ---------- 다음 성장 목표 ----------
+// 지금 상태에서 바로 할 수 있는 성장 중 효과가 큰 것 2~3개 (패배 화면 · 상태 탭 맨 위). 「레벨·장비 올리세요」 대신 무엇을 어디서 할지
+const dropWhere = (q) => (q.drops || []).map((d) => `${d.ch.join('·')}장${d.from === 'elite' ? ' 정예' : d.from === 'safe' ? ' 금고' : ''}`).join(', ');
+const goalsLeft = (q) => q.goals.filter((g) => { const [c, n] = goalProg(q, g); return c < n; }).map((g) => goalText(q, g)).join(' · ');
+function growthTips(max = 3) {
+  const out = [], j = job(), add = (p, t, b, act) => out.push({ p, t, b, act });
+  const loose = j.skills.filter((id) => skillLv(id) && !S.loadout.includes(id));
+  if (loose.length) add(10, `배운 ${j.name} 스킬이 칸에 없어요: 「${SKILLS[loose[0]].name}」${loose.length > 1 ? ` 외 ${loose.length - 1}개` : ''}`, '스킬 칸 바꾸기', `equip:${loose[0]}`);
+  const bench = S.comps.filter((c) => COMPANIONS[c] && !S.party.includes(c));
+  if (S.party.length < S.slots && bench.length) add(9, `동료 칸이 비어 있어요 (${S.party.length}/${S.slots})`, '동료 데려가기', 'comp');
+  const c4 = QMAP.c4;
+  if (c4 && S.slots < 2 && S.comps.length >= 2 && !qDone('c4')) {
+    if (qState('c4') === 'active') add(8, `「${c4.title}」 ${goalsLeft(c4)} → 동료 2명 출전`, '사건 고르기', 'board');
+    else if (questAvail(c4)) add(8, `${NPCS[c4.giver].name}에게 「${c4.title}」 받기 → 동료 2명 출전`, '마을로', 'town');
+  }
+  if (j.rank && !S.rank[S.job]) {
+    const rq = QMAP[j.rank.q];
+    if (rq && qState(rq.id) === 'active') add(8, `3차 승진 「${rq.title}」: ${goalsLeft(rq)}${rq.drops ? ` (${dropWhere(rq)}에서)` : ''}`, '사건 고르기', 'board');
+    else if (rq && questAvail(rq)) add(8, `${NPCS[rq.giver].name}에게 3차 승진 「${rq.title}」 받기 — 스킬 Lv.10·각성 궁극기`, '마을로', 'town');
+  }
+  const up = j.skills.filter((id) => skillLv(id) && skillLv(id) < skillCap(id)).sort((a, b) => skillLv(a) - skillLv(b))[0];
+  if (up && S.sp >= 1 && S.gold >= skillUpCost(up).gold) add(7, `SP ${S.sp} 남음 · 「${SKILLS[up].name}」 Lv.${skillLv(up)} → ${skillLv(up) + 1}`, '스킬 올리기', 'skill');
+  if (S.pts > 0) add(7, `스탯 포인트 ${S.pts}점이 남아 있어요`, '스탯 올리기', 'stat');
+  const gear = ['weapon', 'armor', 'acc', 'gear'].map((k) => S.inv.find((x) => x.uid === S.equip[k])).filter(Boolean).filter((it) => (it.en || 0) < 5).sort((a, b) => (a.en || 0) - (b.en || 0))[0];
+  if (gear && S.gold >= enhCost(gear) * 3) add(6, `장비 「${gear.name}」 +${gear.en || 0} — 수임료로 강화할 수 있어요`, '가방 열기', 'bag');
+  const cl = S.party.filter((c) => COMPANIONS[c] && (S.compLv[c] || 1) < 10).find((c) => S.gold >= Math.round(600 * Math.pow(S.compLv[c] || 1, 1.8)) * 2);
+  if (cl) add(5, `동료 ${COMPANIONS[cl].name} Lv.${S.compLv[cl] || 1} — 레벨 업하면 공격·패시브 +10%`, '동료', 'comp');
+  if (!(S.cons.gimbap > 0)) add(5, '김밥이 없어요 — 멘탈이 바닥나기 전에 먹어야 해요', '김밥 사기', 'shop');
+  if (W && W.kind === 'stage' && S.lv < recLv(W.g)) add(9, `권장 Lv.${recLv(W.g)} · 지금 Lv.${S.lv} — 앞 단계를 다시 돌며 레벨을 올리세요`, '사건 고르기', 'board');
+  return out.sort((a, b) => b.p - a.p).slice(0, max);
+}
+const growthCard = (title) => { const t = growthTips(); return t.length ? `<div class="card hot"><h3>${title}</h3>${t.map((x) => `<div class="row between" style="gap:8px;margin:4px 0"><span>${esc(x.t)}</span><button class="btn sm" data-grow="${x.act}">${esc(x.b)}</button></div>`).join('')}</div>` : ''; };
 function statTab() {
   const st = stats(), j = job(), R = RANGE[j.type], law = S.law, L = S.lv, rk = S.rank[S.job] ? 1.15 : 1, e = eqStats();
   const baseAtk = (10 + 2.3 * (L - 1)) * Math.pow(1.03, L - 1) * j.atk * rk;
   const mech = j.mech && MECH_INFO[j.mech];
-  return `
+  return `${growthCard('다음 성장 목표')}
   <div class="card"><div class="row between"><h3>${esc(jobName())} · Lv.${S.lv}</h3><span class="note">${esc(major().name)} · ${esc(major().pro)}</span></div>
     <div class="row" style="gap:12px;align-items:flex-start"><img src="${heroPreview()}" alt="" style="width:96px;height:112px;object-fit:contain">
-      <table class="tbl"><tr><td>공격력</td><td><b>${fmt(st.atk)}</b><br><span class="note">레벨·직업 ${fmt(baseAtk)} + 논리력 ${law.log * 2} + 장비 ${fmt(e.atk)}${e.atkPct ? ` · ×${(1 + e.atkPct).toFixed(2)}` : ''}</span></td></tr>
-      <tr><td>최대 멘탈</td><td>${fmt(st.hp)} <span class="note">(멘탈 +${law.men * 15})</span></td></tr><tr><td>최대 커피</td><td>${Math.floor(st.mp)} <span class="note">(타격 +${st.mpHit.toFixed(1)})</span></td></tr>
-      <tr><td>스킬 피해</td><td>×${st.skill.toFixed(2)}</td></tr><tr><td>결정타</td><td>${(st.crit * 100).toFixed(1)}% · ×${st.critDmg.toFixed(2)}</td></tr><tr><td>공격 속도</td><td>×${st.spd.toFixed(2)}</td></tr><tr><td>받는 피해 감소</td><td>${(st.dr * 100).toFixed(1)}%</td></tr>${st.ls ? `<tr><td>피흡</td><td>${(st.ls * 100).toFixed(1)}% <span class="note">(1초에 최대 멘탈 6%)</span></td></tr>` : ''}<tr><td>스킬 재사용 감소</td><td>${(st.cdr * 100).toFixed(1)}%${law.foc ? ` <span class="note">(집중력 −${Math.min(15, law.foc * 0.3).toFixed(1)}%)</span>` : ''}</td></tr></table></div>
+      <div style="min-width:0;flex:1"><table class="tbl"><tr><td>공격력</td><td><b>${fmt(st.atk)}</b></td></tr><tr><td>최대 멘탈</td><td><b>${fmt(st.hp)}</b></td></tr><tr><td>최대 커피</td><td>${Math.floor(st.mp)}</td></tr></table>
+      <details><summary class="note">자세한 능력치 · 계산</summary><table class="tbl"><tr><td>공격력</td><td><span class="note">레벨·직업 ${fmt(baseAtk)} + 논리력 ${law.log * 2} + 장비 ${fmt(e.atk)}${e.atkPct ? ` · ×${(1 + e.atkPct).toFixed(2)}` : ''}</span></td></tr>
+      <tr><td>최대 멘탈</td><td><span class="note">멘탈 스탯 +${law.men * 15}</span></td></tr><tr><td>커피 회복</td><td><span class="note">타격당 +${st.mpHit.toFixed(1)}</span></td></tr>
+      <tr><td>스킬 피해</td><td>×${st.skill.toFixed(2)}</td></tr><tr><td>결정타</td><td>${(st.crit * 100).toFixed(1)}% · ×${st.critDmg.toFixed(2)}</td></tr><tr><td>공격 속도</td><td>×${st.spd.toFixed(2)}</td></tr><tr><td>받는 피해 감소</td><td>${(st.dr * 100).toFixed(1)}%</td></tr>${st.ls ? `<tr><td>피흡</td><td>${(st.ls * 100).toFixed(1)}% <span class="note">(1초에 최대 멘탈 6%)</span></td></tr>` : ''}<tr><td>스킬 재사용 감소</td><td>${(st.cdr * 100).toFixed(1)}%${law.foc ? ` <span class="note">(집중력 −${Math.min(15, law.foc * 0.3).toFixed(1)}%)</span>` : ''}</td></tr></table></details></div></div>
     <p>${esc(RANGE[j.type].name)} · ${esc(R.d)} · 경험치 ${fmt(S.exp)} / ${fmt(expReq(S.lv))}${S.boostUntil > now() ? ` · <b style="color:var(--exp)">경험치 2배 ${Math.ceil((S.boostUntil - now()) / 60000)}분</b>` : ''}</p></div>
   ${mech ? `<div class="card"><h3>직업 특성 · ${esc(mech.name)}</h3><p>${esc(mech.d)}</p></div>` : ''}
   <div class="card ${S.pts ? 'hot' : ''}"><div class="row between"><h3>스탯</h3><b style="color:var(--hl)">남은 포인트 ${S.pts}</b></div>
@@ -1176,7 +1225,8 @@ function statTab() {
 }
 
 const skillUpCost = (id) => { const lv = skillLv(id); return { sp: 1, gold: Math.round(120 * Math.pow(lv, 1.7) * (1 + JOBS[SKILLS[id].job].tier)) }; };
-let pickSlot = 0;
+const weakSlot = () => { const w = (id) => (!id ? -1 : (SKILLS[id].job === S.job ? 100 : 0) + skillLv(id)); return [...Array(skillSlots()).keys()].sort((a, b) => w(S.loadout[a]) - w(S.loadout[b]))[0]; };   // 빈 칸 → 다른 직업 스킬 → 낮은 레벨 순
+let pickSlot = 0, equipHint = null;   // equipHint: 방금 배웠는데 칸이 없어 장착 못 한 스킬 → 칸을 누르면 바로 장착
 function skillTab() {
   ensureLoadout();
   if (S.spSeen !== S.sp) { S.spSeen = S.sp; setTimeout(updateBadges, 0); }
@@ -1187,7 +1237,7 @@ function skillTab() {
   }).join('');
   const learned = Object.keys(S.skl).filter((id) => SKILLS[id] && !SKILLS[id].ult && skillLv(id));
   const byJob = {}; for (const id of learned) (byJob[SKILLS[id].job] = byJob[SKILLS[id].job] || []).push(id);
-  const pool = Object.entries(byJob).map(([jid, ids]) => `<div class="pool"><span class="note">${esc(JOBS[jid].name)}</span>${ids.map((id) => `<button class="chip ${S.loadout.includes(id) ? 'on' : ''}" data-equipsk="${id}" style="--c:${JOBS[jid].color}">${esc(SKILLS[id].name)} <small>Lv.${skillLv(id)}</small></button>`).join('')}</div>`).join('');
+  const pool = Object.entries(byJob).map(([jid, ids]) => `<div class="pool"><span class="note">${esc(JOBS[jid].name)}</span>${ids.map((id) => `<button class="chip ${S.loadout.includes(id) ? 'on' : ''}" data-equipsk="${id}" style="--c:${JOBS[jid].color}">${esc(SKILLS[id].name)} <small>Lv.${skillLv(id)}${!S.loadout.includes(id) && jid === S.job ? ' · 미장착' : ''}</small></button>`).join('')}</div>`).join('');
   const rows = j.skills.map((id, i) => {
     const sk = SKILLS[id], lv = skillLv(id), L = sk.learn, evo = SKILL_EVO[id] || [];
     let action = '';
@@ -1204,7 +1254,9 @@ function skillTab() {
       ${evo.length ? `<div class="evo"><span class="${lv >= 5 ? 'on' : ''}">Lv5 강화: ${esc(evo[0])}</span>${JOBS[sk.job].tier >= 2 ? `<span class="${lv >= 7 ? 'on' : ''}">Lv7 각성: ${esc(evo[1])}</span><span class="${lv >= 10 ? 'on' : ''}">Lv10 마스터: 재사용·커피 −20%</span>` : ''}</div>` : ''}<div class="row wrap" style="margin-top:4px">${action}</div></div></div>`;
   }).join('');
   const u = SKILLS[ultId()];
-  return `<div class="card"><div class="row between"><h3>스킬 칸 (A·S·D${n > 3 ? '·C' : ''})</h3><span class="note">칸을 고르고 아래 스킬을 누르세요</span></div>
+  if (equipHint && (!skillLv(equipHint) || S.loadout.includes(equipHint))) equipHint = null;
+  return `<div class="card ${equipHint ? 'hot' : ''}"><div class="row between"><h3>스킬 칸 (A·S·D${n > 3 ? '·C' : ''})</h3><span class="note">칸을 고르고 아래 스킬을 누르세요</span></div>
+    ${equipHint ? `<p><b style="color:var(--hl)">「${esc(SKILLS[equipHint].name)}」</b> — 넣을 칸을 누르세요 (그 칸의 스킬은 빠져요) <button class="btn ghost sm" data-act="nohint">나중에</button></p>` : ''}
     <div class="lslots">${slots}</div>
     ${pool || '<p>배운 스킬이 없습니다.</p>'}
     <p class="note">전직해도 배운 스킬은 사라지지 않아요(이직하면 떠나는 직업 스킬은 반납·환급). 다른 직업 스킬은 위력 90%. 2차 전직하면 C칸이 열립니다.</p></div>
@@ -1619,7 +1671,7 @@ function importSave(file) {
   r.onload = () => {
     try { const d = JSON.parse(r.result); if (!d || d.v !== 5 || !d.major) throw new Error('형식'); localStorage.setItem(slotKey(SLOT), JSON.stringify(d)); }
     catch (e) { toast('세이브 파일이 아니에요'); return; }
-    load(SLOT); ensureLoadout(); checkPassives(); fixJobQuests(); applyOwned(); closeSheet(); enterTown(); resumePending(); toast(`슬롯 ${SLOT}에 세이브 파일을 불러왔어요`);
+    load(SLOT); prepLoaded(); closeSheet(); enterTown(); resumePending(); toast(`슬롯 ${SLOT}에 세이브 파일을 불러왔어요`);
   };
   r.readAsText(file);
 }
@@ -1741,6 +1793,7 @@ function boardRender(tab) {
   return `
   <div class="card ${survOk ? '' : 'locked'}"><div class="row between"><h3>로스쿨 서바이벌</h3><span class="note">최고 ${S.best.surv}웨이브</span></div><p class="note">끝없이 몰려오는 시험 마물을 버텨라. 웨이브마다 한 단계씩 강해지고 5웨이브마다 시험 감독관(정예). 처치 보상은 30%, 탈락 보상은 웨이브에 비례.</p>${survOk ? '<button class="btn red sm" data-act="surv">도전</button>' : '<span class="note">2장 「도서관의 그림자」 완료 후 열림</span>'}</div>
   ${daily.length ? `<div class="card"><h3>오늘의 의뢰 완료</h3>${daily.map((d) => `<div class="row between"><span>${esc(MOBS[d.m].name)} ${d.n}마리</span><button class="btn sm" data-daily="${d.id}">보상 ₩${fmt(d.gold)} · 인지 ${d.inji}</button></div>`).join('')}</div>` : ''}
+  ${stageOpen(c, 5) && !S.cleared[sid(c, 5)] ? growthCard(`${c}-5 원흉 전에 하면 좋은 것`) : ''}
   <div class="card"><div class="row between"><h3>${esc(ch.name)}</h3><span class="note">${esc(ch.place)} · ${TYPE_LABEL[ch.type]}</span></div>
     ${c === 5 ? kakhaCard() : ''}
     ${!chOpen && c > 1 && !chapterReqOk(c) && S.cleared[sid(c - 1, 5)] ? `<p style="color:var(--hp)">${esc(ch.req.why)}</p>` : ''}
@@ -1802,7 +1855,11 @@ function onSheetClick(ev) {
   if (d.cosg) { cosGacha(+d.cosg); return; }
   if (d.route) { const id = d.route; closeSheet(); addJob(id); changeJob(id); const rq = { ceo: 'r_ceo', politician: 'r_pol', youtuber: 'r_yt' }[id]; if (rq && questAvail(QMAP[rq])) acceptQuest(QMAP[rq], true); refreshQuestUI(); save(); return; }
   if (d.transfer) { const id = d.transfer; if (S.inji < 800) return; S.inji -= 800; closeSheet(); const r = transferJob(id); toast(`이직 완료: ${esc(jobName(id))} · 이력서 칸 ${resumeSlots()}${r.sp ? ` · 스킬 초기화 SP ${r.sp} · ₩${fmt(r.gold)} 환급` : ''}`, 4500); save(); return; }
-  if (d.pslot !== undefined) { pickSlot = +d.pslot; refreshSheet(); return; }
+  if (d.pslot !== undefined) {
+    pickSlot = +d.pslot;
+    if (equipHint && skillLv(equipHint) && pickSlot < skillSlots()) { const id = equipHint, was = S.loadout.indexOf(id); if (was >= 0) S.loadout[was] = S.loadout[pickSlot] || null; S.loadout[pickSlot] = id; equipHint = null; SFX.play('coin'); toast(`「${esc(SKILLS[id].name)}」를 ${'ASDC'[pickSlot]}칸에 장착`); }
+    refreshSheet(); return;
+  }
   if (d.equipsk) { const id = d.equipsk, i = pickSlot; if (i >= skillSlots()) return; const was = S.loadout.indexOf(id); if (was >= 0) S.loadout[was] = S.loadout[i] || null; S.loadout[i] = id; pickSlot = Math.min(skillSlots() - 1, i + 1); SFX.play('coin'); updateBadges(); refreshSheet(); return; }
   if (d.res) { if (S.resume.length < resumeSlots() && !S.resume.includes(d.res)) { S.resume.push(d.res); statCache = null; SFX.play('coin'); } updateBadges(); refreshSheet(); return; }
   if (d.unres) { S.resume = S.resume.filter((x) => x !== d.unres); statCache = null; updateBadges(); refreshSheet(); return; }
@@ -1814,13 +1871,23 @@ function onSheetClick(ev) {
   if (d.bbook) { const cost = d.bbook === 'b2' ? 300 : 800; if (S.inji < cost) return; S.inji -= cost; S.books[d.bbook]++; toast(`${BOOKS[d.bbook].name} 구매`); SFX.play('coin'); refreshSheet(); return; }
   if (d.stage) { const { c, s } = parseSid(d.stage); closeSheet(); enterStage(c, s, +d.hard || 0); return; }
   if (d.job) { closeSheet(); changeJob(d.job); return; }
+  if (d.grow) {   // 성장 안내 버튼: 해당 화면으로
+    const g = d.grow, toTown = () => { closeSheet(); if (scene === 'town') return; if (scene === 'stage' && W && !W.ended && player && !player.dead) returnTown(); else enterTown(); };
+    if (g === 'town') { toTown(); return; }
+    if (g === 'board') { toTown(); openBoard(); return; }
+    if (g === 'shop') { openMenu('shop'); return; }
+    if (g.startsWith('equip:')) { const id = g.slice(6); if (skillLv(id) && !S.loadout.includes(id)) { equipHint = id; pickSlot = weakSlot(); } openMenu('skill'); return; }
+    openMenu(g); return;
+  }
   if (d.acc) { const q = QMAP[d.acc]; closeSheet(); acceptQuest(q); return; }
   if (d.quit) {   // 두 번 눌러 확정
     const q = QMAP[d.quit]; if (!q) return;
     if (quitArm !== q.id) { quitArm = q.id; setTimeout(() => { if (quitArm === q.id) { quitArm = null; if (sheetRender) refreshSheet(); } }, 3000); refreshSheet(); return; }
     quitQuest(q); refreshSheet(); return;
   }
-  if (d.learn) { const sk = SKILLS[d.learn], L = sk.learn; if (S.lv < L.lv || !S.books[L.book] || S.gold < L.gold) return; S.books[L.book]--; S.gold -= L.gold; S.skl[d.learn] = 1; ensureLoadout(); SFX.play('level'); showBanner('스킬 습득', sk.name); updateBadges(); refreshSheet(); return; }
+  if (d.learn) { const sk = SKILLS[d.learn], L = sk.learn; if (S.lv < L.lv || !S.books[L.book] || S.gold < L.gold) return; S.books[L.book]--; S.gold -= L.gold; S.skl[d.learn] = 1; ensureLoadout(); SFX.play('level'); showBanner('스킬 습득', sk.name);
+    if (!S.loadout.includes(d.learn)) { equipHint = d.learn; pickSlot = weakSlot(); }   // 칸이 꽉 찼으면 넣을 칸을 고르게 (가장 약한 칸을 먼저 골라 둔다)
+    updateBadges(); refreshSheet(); return; }
   if (d.skup) { const c = skillUpCost(d.skup); if (S.sp < c.sp || S.gold < c.gold || skillLv(d.skup) >= skillCap(d.skup)) return; S.sp -= c.sp; S.gold -= c.gold; S.skl[d.skup]++; { const L = S.skl[d.skup], ev = SKILL_EVO[d.skup] || [], nm = SKILLS[d.skup].name; if (L === 5) showBanner('스킬 강화!', `${nm} · ${ev[0] || ''}`); else if (L === 7) showBanner('스킬 각성!', `${nm} · 새 기능: ${ev[1] || ''}`); else if (L === 10) showBanner('스킬 마스터!', `${nm} · 재사용·커피 −20%`); } checkPassives(); SFX.play('level'); updateBadges(); refreshSheet(); return; }
   if (d.party) { const id = d.party; if (S.party.includes(id)) S.party = S.party.filter((x) => x !== id); else if (S.party.length < S.slots) S.party.push(id); statCache = null; if (W && W.kind === 'stage') buildAllies(); refreshSheet(); return; }
   if (d.cup) { const lv = S.compLv[d.cup] || 1; const cost = Math.round(600 * Math.pow(lv, 1.8)); if (S.gold < cost) return; S.gold -= cost; S.compLv[d.cup] = lv + 1; statCache = null; SFX.play('level'); refreshSheet(); return; }
@@ -1853,6 +1920,7 @@ function onSheetClick(ev) {
     toast(`스킬 초기화 · SP ${r.sp} · ₩${fmt(r.gold)} 환급`, 4000); SFX.play('level'); refreshSheet(); save();
   }
   else if (a === 'update') doUpdate();
+  else if (a === 'nohint') { equipHint = null; refreshSheet(); }
   else if (a === 'monthly') buyMonthly();
   else if (a === 'tocharge') toCharge();
   else if (a === 'toshop') openMenu('shop');
@@ -1961,7 +2029,7 @@ function showTitle() {
     const b = ev.target.closest('button'); if (!b) return;
     SFX.init(); BGM.ensure();
     if (b.dataset.slotNew) { SLOT = +b.dataset.slotNew; S = newState(); t.classList.remove('show'); chooseMajor(); }
-    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); ensureLoadout(); checkPassives(); fixJobQuests(); grandfather(); applyOwned(); monthlyTick(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); resumePending(); }
+    else if (b.dataset.slotLoad) { load(+b.dataset.slotLoad); SFX.on = S.sound; BGM.on = S.music !== false; t.classList.remove('show'); prepLoaded(); if (Object.keys(S.cleared).length) enterTown(); else enterStage(1, 1); resumePending(); }
     else if (b.dataset.slotDel) { const n = +b.dataset.slotDel; if (slotArm === n) { deleteSlot(n); slotArm = 0; } else { slotArm = n; setTimeout(() => { if (slotArm === n && scene === 'title') { slotArm = 0; showTitle(); } }, 3000); } showTitle(); }
     else if (b.id === 't-ends') endingGallery();
     else if (b.id === 't-ext') openExternal();

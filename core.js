@@ -113,7 +113,7 @@ const SFX = {
 // ======================================================================
 // 상태 · 저장
 // ======================================================================
-const GAME_VERSION = '0.7.13-test';                // 버그 제보에 붙는 버전
+const GAME_VERSION = '0.7.14-test';                // 버그 제보에 붙는 버전
 // 그래픽 품질 (기기마다 따로): 0 높음 · 1 중간(빛 번짐 끔) · 2 낮음(+해상도·입자 줄임). 「자동」이면 렉을 감지해 한 단계씩 내리고 기억한다
 const GFX_KEY = 'lawyer-gfx', GFX_LV_KEY = 'lawyer-gfx-lv';
 let GFX = 'auto', gfxLevel = 0;
@@ -765,8 +765,9 @@ function playerDied() {
 // 부활은 사건당 4번까지, 갈수록 비싸다 (무한 부활은 막고, 막히면 충전으로 이어진다)
 const REVIVE_COST = [50, 100, 200, 300];
 function deathSheet() { openSheet('번아웃', [], () => `
-    <div class="card"><h3>사건이 속행되었습니다</h3><p>권장 레벨보다 낮다면 앞 단계를 다시 돌며 레벨과 장비를 챙기세요. 스킬·스탯·동료·이력서도 확인!</p>
-    <div class="row wrap">${reviveBtns()}<button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>`, null, 'dead'); }
+    <div class="card"><h3>사건이 속행되었습니다</h3>
+    <div class="row wrap">${reviveBtns()}<button class="btn ghost" data-act="retry">처음부터 다시</button><button class="btn ghost" data-act="town">마을로</button></div></div>
+    ${growthCard('다음에 이기려면') || '<div class="card"><p>권장 레벨보다 낮다면 앞 단계를 다시 돌며 레벨과 장비를 챙기세요.</p></div>'}`, null, 'dead'); }
 function reviveBtns() {
   const n = W.revives || 0, c = REVIVE_COST[n];
   if (n >= REVIVE_COST.length) return `<button class="btn" disabled>부활은 사건당 ${REVIVE_COST.length}번까지</button>`;

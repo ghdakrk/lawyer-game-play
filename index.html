@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="법조인 키우기">
-<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.13-test">
+<meta name="description" content="현직 변호사가 만든 법조인 성장 액션 RPG · 테스트 버전 0.7.14-test">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -157,6 +157,7 @@ button { font: inherit; color: inherit; }
 .btn.red { background: var(--stamp); color: #fff; } .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
 .btn.sm { padding: 6px 10px; font-size: 13px; }
 #h-boost { justify-self: start; display: flex; gap: 5px; align-items: center; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: rgba(20,24,46,.82); border: 1px solid var(--exp); color: var(--exp); text-shadow: 0 1px 2px #000; animation: bpulse 1.6s ease-in-out infinite; }
+[hidden] { display: none !important; }   /* 화면 요소 규칙(display:flex 등)이 hidden을 덮어써 숨긴 것이 보이던 문제 (예: 부스터가 꺼져도 EXP×2) */
 #h-boost b { font-family: var(--font-display); font-weight: 400; } #h-boost span { color: var(--fg); font-variant-numeric: tabular-nums; }
 @keyframes bpulse { 50% { box-shadow: 0 0 8px var(--exp); } }
 .bar.exp.boost > i { background: linear-gradient(90deg, var(--exp), #fff6a8, var(--exp)); background-size: 200% 100%; animation: bshine 1.2s linear infinite; }
