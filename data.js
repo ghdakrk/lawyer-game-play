@@ -166,9 +166,9 @@ const SKILLS = {
   pr_u2: { name: '특별수사본부', tag: '각성 전체', job: 'prosecutor', ult: true, awak: true, mult: 3.6, d: '[각성] 거대한 직인 세 개가 연달아 떨어지고 쇠사슬이 모두를 묶는다.' },
   jd_u2: { name: '전원합의체', tag: '각성 전체', job: 'judge', ult: true, awak: true, mult: 3.4, d: '[각성] 의사봉 13개가 비처럼 쏟아진 뒤 거대한 의사봉이 판결한다.' },
   // 리걸테크 CEO (근거리 · 스킬에 수임료 사용)
-  ce1: { name: '법인카드 긁기', tag: '돌진·관통', job: 'ceo', mp: 12, cd: 4, mult: 2.6, learn: 'job', d: '황금 카드로 앞을 길게 긁으며 돌진한다. 지나간 적 모두 피해.' },
-  ce2: { name: '투자 유치', tag: '투척 광역', job: 'ceo', mp: 20, cd: 8, mult: 1.8, learn: { lv: 14, book: 'b1', gold: 1500 }, d: '돈가방을 던진다. 떨어진 곳에서 터져 금화가 사방으로 튄다.' },
-  ce3: { name: '적대적 M&A', tag: '끌어오기·처형', job: 'ceo', mp: 28, cd: 11, mult: 3.2, learn: { lv: 20, book: 'b2', gold: 3000 }, d: '주변 적을 앞으로 끌어와 벤다. 체력 30% 이하 일반 몬스터는 즉시 인수(처치)하고 수임료를 번다.' },
+  ce1: { name: '법인카드 긁기', tag: '돌진·관통', job: 'ceo', mp: 12, cd: 4, mult: 2.6, learn: 'job', d: '황금 카드로 앞을 길게 긁으며 돌진한다. 지나간 적 모두 피해. 돌진하는 동안 무적.' },
+  ce2: { name: '투자 유치', tag: '투척 광역', job: 'ceo', mp: 20, cd: 8, mult: 1.8, learn: { lv: 14, book: 'b1', gold: 1500 }, d: '앞쪽 가장 가까운 적에게 돈가방을 던진다. 떨어진 곳에서 터져 금화가 사방으로 튄다.' },
+  ce3: { name: '적대적 M&A', tag: '끌어오기·처형', job: 'ceo', mp: 28, cd: 11, mult: 3.2, learn: { lv: 20, book: 'b2', gold: 3000 }, d: '주변 적을 앞으로 끌어와 벤다. 체력 30% 이하 일반 몬스터는 즉시 인수(처치)하고 수임료를 번다. 보스·중간 보스는 지분 희석으로 피해 1.5배.' },
   ce_u: { name: '상장 (IPO)', tag: '전체', job: 'ceo', ult: true, mult: 3.0, d: '주가 그래프가 화면을 뚫고 치솟은 뒤 금화가 쏟아진다.' },
   ce_u2: { name: '유니콘 등극', tag: '각성 전체', job: 'ceo', ult: true, awak: true, mult: 3.4, d: '[각성] 주가 그래프가 두 번 연달아 화면을 뚫고, 금화 폭우가 쏟아진다.' },
   // 정치 신인 (중거리 · 지지율)

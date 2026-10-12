@@ -373,12 +373,18 @@ const SK = {
   // ---------------- 리걸테크 CEO ----------------
   ce1(p, dmg, st, e) {
     p.dashT = 0.26 * (e ? 1.25 : 1); p.dashV = p.face * 700; p.castT = 0.28;
+    p.inv = Math.max(p.inv, p.dashT + 0.15);   // 돌진 중 무적: 보스 몸을 뚫고 지나가며 맞던 것 (CEO가 보스전에서 다른 직업보다 1.5배 자주 맞았다)
     W.areas.push({ follow: true, ox0: -20, ox1: 46, y0: -64, y1: 0, dmg, once: true, hit: new Set(), dur: p.dashT + 0.04, t: 0, kb: 180, color: '#ffd24d' });
     W.fx.push({ k: 'slash', x: p.x + p.face * 14, y: p.y - 34, r: 82, face: p.face, color: '#ffd24d', t: 0, dur: 0.24, combo: 3, w: 16 });
     p.onDashEnd = () => { fxSpark(p.x + p.face * 30, p.y - 34, '#ffd24d', 12); if (e >= 2) explode(p.x + p.face * 40, p.y - 30, 85, dmg * 1.2, '#ffd24d'); };
   },
   ce2(p, dmg, st, e) {
-    for (let i = 0; i <= e; i++) W.pprj.push({ k: 'moneybag', x: p.x + p.face * 14, y: p.y - 44, vx: p.face * (240 + i * 95), vy: -390, g: 950, r: 12, dmg, pierce: 0, hit: new Set(), life: 2.4, rot: 0, vr: 7, land: 'money', boomR: 82, stun: e >= 2 ? 1.2 : 0, nohit: true, delay: i * 0.1 });
+    // 앞쪽 가장 가까운 적 위로 떨어지게 던진다 (예전엔 늘 같은 거리로 날아가 붙어 싸우는 보스를 넘어가 버렸다)
+    const T = 2 * 390 / 950, tg = liveMobs().filter((m) => !m.fake && (m.x - p.x) * p.face > 20 && (m.x - p.x) * p.face < 420 && Math.abs(m.y - p.y) < 120).sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+    for (let i = 0; i <= e; i++) {
+      const vx = tg ? (tg.x + p.face * (i - e / 2) * 46 - (p.x + p.face * 14)) / T : p.face * (240 + i * 95);
+      W.pprj.push({ k: 'moneybag', x: p.x + p.face * 14, y: p.y - 44, vx, vy: -390, g: 950, r: 12, dmg, pierce: 0, hit: new Set(), life: 2.4, rot: 0, vr: 7, land: 'money', boomR: 82, stun: e >= 2 ? 1.2 : 0, nohit: true, delay: i * 0.1 });
+    }
   },
   ce3(p, dmg, st, e) {
     const R = e ? 260 : 200; p.castT = 0.45;
@@ -388,7 +394,7 @@ const SK = {
       if (!W) return;
       W.fx.push({ k: 'slash', x: p.x + p.face * 12, y: p.y - 36, r: 112, face: p.face, color: '#ffd24d', t: 0, dur: 0.28, combo: 3, w: 20 });
       const thr = e >= 2 ? 0.4 : 0.3;
-      for (const m of liveMobs()) { if (m.fake) continue; const dx = (m.x - p.x) * p.face; if (dx < -20 || dx > 135 || Math.abs(m.y - p.y) > 80) continue; if (!m.boss && !m.mid && m.hp < m.max * thr) execute(m, 'card'); else damageMob(m, dmg, { kb: 160, heavy: true, color: '#ffd24d' }); }
+      for (const m of liveMobs()) { if (m.fake) continue; const dx = (m.x - p.x) * p.face; if (dx < -20 || dx > 135 || Math.abs(m.y - p.y) > 80) continue; if (!m.boss && !m.mid && m.hp < m.max * thr) execute(m, 'card'); else damageMob(m, m.boss || m.mid ? dmg * 1.5 : dmg, { kb: 160, heavy: true, color: '#ffd24d' }); }   // 보스·중간 보스는 인수(처형) 대신 지분 희석: 피해 1.5배
       cam.shake = 8; SFX.play('crit');
     });
   },

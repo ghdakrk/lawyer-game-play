@@ -1165,7 +1165,7 @@ function tryCloseSheet() {
 function closeSheet() { $('#sheet').classList.remove('show', 'top'); sheetRender = null; selItem = null; sheetMode = ''; quiz = null; save(); refreshQuestUI(); }
 // 메뉴 탭: 핵심 성장(상태·스킬·가방·퀘스트) 먼저. 동료·이력서·도감은 쓸 수 있게 될 때 나타난다 (처음 화면의 정보를 줄인다)
 const MENU_TABS = [['stat', '상태'], ['skill', '스킬'], ['bag', '가방'], ['quest', '퀘스트'], ['comp', '동료'], ['resume', '이력서'], ['cos', '코디'], ['shop', '상점'], ['book', '도감'], ['opt', '설정']];
-const TAB_OPEN = { comp: () => S.comps.length > 0, resume: () => S.jobs.length >= 2, book: () => S.trivia.length > 0 };
+const TAB_OPEN = { comp: () => S.comps.length > 0, resume: () => resumeSlots() > 0, book: () => S.trivia.length > 0 };   // 이력서: 칸이 있으면 (첫 전직 뒤 · 재심 경력 포함)
 const menuTabs = () => MENU_TABS.filter(([k]) => !TAB_OPEN[k] || TAB_OPEN[k]());
 function openMenu(tab) { const tabs = menuTabs(); if (tab && !tabs.some(([k]) => k === tab)) tab = 'stat'; openSheet('메뉴', tabs, menuRender, tab); updateBadges(); }
 function menuRender(tab) {
@@ -1181,16 +1181,29 @@ function growthTips(max = 3) {
   if (loose.length) add(10, `배운 ${j.name} 스킬이 칸에 없어요: 「${SKILLS[loose[0]].name}」${loose.length > 1 ? ` 외 ${loose.length - 1}개` : ''}`, '스킬 칸 바꾸기', `equip:${loose[0]}`);
   const bench = S.comps.filter((c) => COMPANIONS[c] && !S.party.includes(c));
   if (S.party.length < S.slots && bench.length) add(9, `동료 칸이 비어 있어요 (${S.party.length}/${S.slots})`, '동료 데려가기', 'comp');
+  // 목표를 다 채운 퀘스트: 사건이 아니라 보고하러 (예전엔 2-3을 이미 깼는데도 「사건 고르기」로 보냈다)
+  const report = (q, gain) => add(9, `「${q.title}」 완료 — ${NPCS[q.giver].name}에게 보고하면 ${gain}`, '보고하러 마을로', 'town');
   const c4 = QMAP.c4;
   if (c4 && S.slots < 2 && S.comps.length >= 2 && !qDone('c4')) {
-    if (qState('c4') === 'active') add(8, `「${c4.title}」 ${goalsLeft(c4)} → 동료 2명 출전`, '사건 고르기', 'board');
+    if (questReady(c4)) report(c4, '동료 2명 출전');
+    else if (qState('c4') === 'active') add(8, `「${c4.title}」 ${goalsLeft(c4)} → 동료 2명 출전`, '사건 고르기', 'board');
     else if (questAvail(c4)) add(8, `${NPCS[c4.giver].name}에게 「${c4.title}」 받기 → 동료 2명 출전`, '마을로', 'town');
   }
   if (j.rank && !S.rank[S.job]) {
     const rq = QMAP[j.rank.q];
-    if (rq && qState(rq.id) === 'active') add(8, `3차 승진 「${rq.title}」: ${goalsLeft(rq)}${rq.drops ? ` (${dropWhere(rq)}에서)` : ''}`, '사건 고르기', 'board');
+    if (rq && questReady(rq)) report(rq, '3차 승진 (스킬 Lv.10·각성 궁극기)');
+    else if (rq && qState(rq.id) === 'active') add(8, `3차 승진 「${rq.title}」: ${goalsLeft(rq)}${rq.drops && rq.goals.some((g) => g.k === 'item' && goalProg(rq, g)[0] < g.n) ? ` (${dropWhere(rq)}에서)` : ''}`, '사건 고르기', 'board');
     else if (rq && questAvail(rq)) add(8, `${NPCS[rq.giver].name}에게 3차 승진 「${rq.title}」 받기 — 스킬 Lv.10·각성 궁극기`, '마을로', 'town');
   }
+  // 동료 퀘스트: 처치·수집 목표가 앞 장에 있어 진행이 멈추기 쉽다 (예: 마감 고블린 23/25인 채 4장으로) → 어디서 하는지
+  const mobWhere = (id) => CHAPTERS.map((ch, i) => (ch.mobs.includes(id) ? i + 1 : 0)).filter(Boolean).join('·');
+  for (const q of QUESTS) if (q.type === 'comp' && q.rew && q.rew.comp && qState(q.id) === 'active' && !questReady(q)) {
+    const g = q.goals.find((x) => { const [c, n] = goalProg(q, x); return c < n; }); if (!g) continue;
+    const where = g.k === 'kill' && mobWhere(g.m) ? ` (${mobWhere(g.m)}장)` : g.k === 'item' && q.drops ? ` (${dropWhere(q)}에서)` : '';
+    add(7, `동료 퀘스트 「${q.title}」: ${goalText(q, g)}${where} → ${COMPANIONS[q.rew.comp].name} 합류`, '사건 고르기', 'board'); break;
+  }
+  const done = QUESTS.find((q) => q !== c4 && q.id !== (j.rank && j.rank.q) && questReady(q));   // 그 밖에 보고만 남은 퀘스트 (보상이 성장)
+  if (done) report(done, '보상');
   const up = j.skills.filter((id) => skillLv(id) && skillLv(id) < skillCap(id)).sort((a, b) => skillLv(a) - skillLv(b))[0];
   if (up && S.sp >= 1 && S.gold >= skillUpCost(up).gold) add(7, `SP ${S.sp} 남음 · 「${SKILLS[up].name}」 Lv.${skillLv(up)} → ${skillLv(up) + 1}`, '스킬 올리기', 'skill');
   if (S.pts > 0) add(7, `스탯 포인트 ${S.pts}점이 남아 있어요`, '스탯 올리기', 'stat');
